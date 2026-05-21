@@ -133,7 +133,8 @@ test("runCli tells unauthenticated one-shot users to use REPL /login", async () 
 
 test("slash command parser and dispatcher handle help, unknown, logout, and login", async () => {
   assert.equal(parseSlash("write tests"), null);
-  assert.deepEqual(parseSlash("  /help now "), { command: "/help", args: ["now"] });
+  assert.equal(parseSlash("  /help now "), null);
+  assert.deepEqual(parseSlash("/help now "), { command: "/help", args: ["now"] });
   assert.deepEqual(getSlashCommandCompletions("/")?.map((command) => command.command), [
     "/login",
     "/logout",

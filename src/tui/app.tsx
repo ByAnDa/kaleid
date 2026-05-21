@@ -115,7 +115,7 @@ export function App({ model, cwd, session, provider, tools, runTurn }: AppProps)
 
       updateInput("");
 
-      const slash = parseSlash(prompt);
+      const slash = parseSlash(value);
       if (slash) {
         setSlashMenuOpen(false);
         setBusy(true);

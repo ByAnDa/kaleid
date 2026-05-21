@@ -46,11 +46,11 @@ export const SLASH_HELP = SLASH_COMMANDS.map(
 ).join("\n");
 
 export function parseSlash(input: string): ParsedSlashCommand | null {
-  const trimmed = input.trim();
-  if (!trimmed.startsWith("/")) {
+  if (!input.startsWith("/")) {
     return null;
   }
 
+  const trimmed = input.trimEnd();
   const [command = "/", ...args] = trimmed.split(/\s+/u);
   return { command, args };
 }
