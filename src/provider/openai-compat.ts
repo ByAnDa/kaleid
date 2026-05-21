@@ -11,6 +11,7 @@ interface PendingToolCall {
 interface ChatCompletionMessage {
   role: "system" | "user" | "assistant" | "tool";
   content: string | null;
+  reasoning_content?: string;
   tool_call_id?: string;
   tool_calls?: Array<{
     id: string;
@@ -59,6 +60,11 @@ function finishReason(value: unknown, usedTool: boolean): "stop" | "tool_calls" 
   return "stop";
 }
 
+function reasoningDelta(delta: Record<string, unknown> | undefined): string {
+  const value = delta?.reasoning_content ?? delta?.reasoning ?? delta?.reasoning_text;
+  return typeof value === "string" ? value : "";
+}
+
 export function encodeChatMessages(systemPrompt: string, messages: ChatMessage[]): ChatCompletionMessage[] {
   const encoded: ChatCompletionMessage[] = [{ role: "system", content: systemPrompt }];
 
@@ -78,6 +84,7 @@ export function encodeChatMessages(systemPrompt: string, messages: ChatMessage[]
     encoded.push({
       role: message.role,
       content: message.content.length > 0 ? message.content : null,
+      ...(message.role === "assistant" ? { reasoning_content: message.reasoningContent ?? "" } : {}),
       ...(message.toolCalls && message.toolCalls.length > 0
         ? {
             tool_calls: message.toolCalls.map((toolCall) => ({
@@ -204,6 +211,11 @@ function processChunkData(
     }
 
     const delta = choice.delta as Record<string, unknown> | undefined;
+    const reasoning = reasoningDelta(delta);
+    if (reasoning.length > 0) {
+      events.push({ type: "reasoning", delta: reasoning });
+    }
+
     if (typeof delta?.content === "string" && delta.content.length > 0) {
       events.push({ type: "text", delta: delta.content });
     }

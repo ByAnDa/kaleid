@@ -45,7 +45,11 @@ import { editTool } from "../src/tools/edit.js";
 import { readTool } from "../src/tools/read.js";
 import { writeTool } from "../src/tools/write.js";
 import { getSlashCommandCompletions, parseSlash, runSlashCommand } from "../src/tui/commands.js";
-import { applySelectorTransition, cancelSelectorTransition } from "../src/tui/app.js";
+import {
+  applySelectorTransition,
+  cancelSelectorTransition,
+  resolveSlashEnterSubmission
+} from "../src/tui/app.js";
 import {
   buildConversationEntries,
   getVisibleConversationEntries
@@ -273,6 +277,9 @@ test("slash command parser and dispatcher handle help, unknown, logout, and logi
   assert.deepEqual(getSlashCommandCompletions("/nope"), []);
   assert.equal(getSlashCommandCompletions("plain /"), null);
   assert.equal(getSlashCommandCompletions("/login now"), null);
+  assert.equal(resolveSlashEnterSubmission("/he", getSlashCommandCompletions("/he") ?? [], 0), "/help");
+  assert.equal(resolveSlashEnterSubmission("/lo", getSlashCommandCompletions("/lo") ?? [], 1), "/logout");
+  assert.equal(resolveSlashEnterSubmission("/nope", getSlashCommandCompletions("/nope") ?? [], -1), "/nope");
 
   const help = await runSlashCommand({ command: "/help", args: [] });
   assert.equal(help.action, "continue");
@@ -843,6 +850,7 @@ test("Responses encoder preserves messages, tool calls, tool outputs, and tool s
     systemPrompt: "system",
     sessionId: "session_1",
     messages: [
+      { role: "system", content: "runtime system summary" },
       { role: "user", content: "read it" },
       { role: "assistant", content: "", toolCalls: [{ id: "call_1", name: "read", arguments: { path: "a.txt" } }] },
       { role: "tool", content: "1\tok", toolCallId: "call_1" }
@@ -853,6 +861,8 @@ test("Responses encoder preserves messages, tool calls, tool outputs, and tool s
 
   assert.equal(body.prompt_cache_key, "session_1");
   assert.equal(body.reasoning.effort, "high");
+  assert.equal(body.instructions, "system");
+  assert.equal((body.input as Array<Record<string, unknown>>).some((item) => item.role === "system"), false);
   assert.equal(body.input[0]?.type, "message");
   assert.equal(body.input[1]?.type, "function_call");
   assert.equal(body.input[2]?.type, "function_call_output");
@@ -963,6 +973,128 @@ test("OpenAI-compatible encoder and SSE parser handle chat tools", async () => {
     toolCall: { id: "call_2", name: "read", arguments: { path: "package.json" } }
   });
   assert.deepEqual(events[2], { type: "done", finishReason: "tool_calls" });
+});
+
+test("OpenAI-compatible provider preserves DeepSeek reasoning content without displaying it", async () => {
+  const body = buildChatCompletionBody({
+    model: "deepseek-reasoner",
+    systemPrompt: "system",
+    messages: [
+      { role: "user", content: "continue" },
+      { role: "assistant", content: "visible", reasoningContent: "hidden reasoning" },
+      { role: "assistant", content: "plain" }
+    ],
+    tools: []
+  });
+
+  const messages = body.messages as Array<Record<string, unknown>>;
+  assert.equal(messages[1]?.role, "user");
+  assert.equal(messages[1]?.reasoning_content, undefined);
+  assert.equal(messages[2]?.reasoning_content, "hidden reasoning");
+  assert.equal(messages[3]?.reasoning_content, "");
+
+  const fixture = [
+    `data: ${JSON.stringify({ choices: [{ delta: { reasoning_content: "think " } }] })}`,
+    "",
+    `data: ${JSON.stringify({ choices: [{ delta: { reasoning: "more ", content: "visible" } }] })}`,
+    "",
+    `data: ${JSON.stringify({ choices: [{ delta: { reasoning_text: "done" }, finish_reason: "stop" }] })}`,
+    "",
+    "data: [DONE]",
+    "",
+    ""
+  ].join("\n");
+
+  const events = await collect(parseChatCompletionsSSE(streamFromString(fixture)));
+  assert.deepEqual(
+    events.filter((event) => event.type === "reasoning").map((event) => event.delta),
+    ["think ", "more ", "done"]
+  );
+  assert.deepEqual(
+    events.filter((event) => event.type === "text"),
+    [{ type: "text", delta: "visible" }]
+  );
+  assert.deepEqual(events.at(-1), { type: "done", finishReason: "stop" });
+});
+
+test("runTurn stores fake DeepSeek reasoning and sends it back after a tool call", async () => {
+  await withTempSessions(async () => {
+    const dir = await mkdtemp(join(tmpdir(), "kaleid-deepseek-"));
+    try {
+      await writeFile(join(dir, "input.txt"), "file contents", "utf8");
+      const requestBodies: Array<Record<string, unknown>> = [];
+      const provider = new OpenAICompatProvider({
+        id: "deepseek",
+        baseURL: "https://deepseek.fake/v1",
+        apiKey: "sk-test",
+        defaultModel: "deepseek-reasoner",
+        fetchImpl: async (_url, init) => {
+          requestBodies.push(JSON.parse(String(init?.body)) as Record<string, unknown>);
+          if (requestBodies.length === 1) {
+            return new Response(
+              streamFromString(
+                [
+                  `data: ${JSON.stringify({ choices: [{ delta: { reasoning_content: "I should inspect the file.", content: "Reading." } }] })}`,
+                  "",
+                  `data: ${JSON.stringify({
+                    choices: [
+                      {
+                        delta: {
+                          tool_calls: [
+                            {
+                              index: 0,
+                              id: "call_1",
+                              function: { name: "read", arguments: "{\"path\":\"input.txt\"}" }
+                            }
+                          ]
+                        },
+                        finish_reason: "tool_calls"
+                      }
+                    ]
+                  })}`,
+                  "",
+                  "data: [DONE]",
+                  "",
+                  ""
+                ].join("\n")
+              ),
+              { status: 200, headers: { "Content-Type": "text/event-stream" } }
+            );
+          }
+
+          return new Response(
+            streamFromString(
+              `data: ${JSON.stringify({ choices: [{ delta: { content: "done" }, finish_reason: "stop" }] })}\n\n`
+            ),
+            { status: 200, headers: { "Content-Type": "text/event-stream" } }
+          );
+        }
+      });
+
+      const session = createSession();
+      const events = await collect(
+        runTurn(session, "read input.txt", {
+          provider,
+          tools: [readTool],
+          model: "deepseek-reasoner",
+          cwd: dir
+        })
+      );
+
+      assert.deepEqual(
+        events.filter((event) => event.type === "assistant_text").map((event) => event.delta),
+        ["Reading.", "done"]
+      );
+      const firstAssistant = session.messages.find((message) => message.role === "assistant");
+      assert.equal(firstAssistant?.reasoningContent, "I should inspect the file.");
+
+      const secondMessages = requestBodies[1]?.messages as Array<Record<string, unknown>>;
+      const replayedAssistant = secondMessages.find((message) => message.role === "assistant");
+      assert.equal(replayedAssistant?.reasoning_content, "I should inspect the file.");
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
 });
 
 test("OpenAICompatProvider posts bearer-authenticated streaming chat completions", async () => {
@@ -1168,7 +1300,7 @@ test("session persistence writes jsonl and resume rebuilds compacted messages", 
     await compacted.persist();
 
     const resumed = await loadSessionData("session_test");
-    assert.equal(resumed.messages[0]?.role, "system");
+    assert.equal(resumed.messages[0]?.role, "user");
     assert.match(resumed.messages[0]?.content ?? "", new RegExp(COMPACTION_SUMMARY_PREFIX, "u"));
     assert.equal(resumed.messages.at(-1)?.content, "second task");
   });

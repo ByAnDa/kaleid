@@ -20,7 +20,12 @@ import {
 import { createProviderForModel, getAuthenticatedModels } from "../provider/registry.js";
 import type { LLMProvider } from "../provider/types.js";
 import type { Tool } from "../tools/types.js";
-import { getSlashCommandCompletions, parseSlash, runSlashCommand } from "./commands.js";
+import {
+  getSlashCommandCompletions,
+  parseSlash,
+  runSlashCommand,
+  type SlashCommandDefinition
+} from "./commands.js";
 import { Conversation } from "./components/Conversation.js";
 import { Header, HEADER_HEIGHT } from "./components/Header.js";
 import { InputBar, getInputBarHeight } from "./components/InputBar.js";
@@ -119,6 +124,14 @@ function moveSelection(current: number, direction: -1 | 1, count: number): numbe
 function getCurrentIndex(options: OptionSelectorItem[]): number {
   const currentIndex = options.findIndex((option) => option.current);
   return currentIndex >= 0 ? currentIndex : 0;
+}
+
+export function resolveSlashEnterSubmission(
+  input: string,
+  slashCandidates: SlashCommandDefinition[],
+  selectedSlashIndex: number
+): string {
+  return slashCandidates[selectedSlashIndex]?.command ?? input;
 }
 
 function modelToOption(currentModel: string, model: AvailableModel): OptionSelectorItem {
@@ -855,13 +868,7 @@ export function App({
         return;
       }
 
-      const selected = slashCandidates[selectedSlashIndex];
-      if (selected && input !== selected.command) {
-        completeSlashCommand();
-        return;
-      }
-
-      void submit(input);
+      void submit(resolveSlashEnterSubmission(input, slashCandidates, selectedSlashIndex));
     },
     { isActive: slashMenuVisible }
   );

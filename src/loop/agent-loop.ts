@@ -65,6 +65,7 @@ export async function* runTurn(
       }
 
       let assistantText = "";
+      let assistantReasoning = "";
       const toolCalls: ToolCall[] = [];
       let sawUsage = false;
 
@@ -82,6 +83,8 @@ export async function* runTurn(
         if (event.type === "text") {
           assistantText += event.delta;
           yield { type: "assistant_text", delta: event.delta };
+        } else if (event.type === "reasoning") {
+          assistantReasoning += event.delta;
         } else if (event.type === "tool_call") {
           toolCalls.push(event.toolCall);
         } else if (event.type === "usage") {
@@ -93,6 +96,7 @@ export async function* runTurn(
       const assistantMessage: ChatMessage = {
         role: "assistant",
         content: assistantText,
+        ...(assistantReasoning.length > 0 ? { reasoningContent: assistantReasoning } : {}),
         ...(toolCalls.length > 0 ? { toolCalls } : {})
       };
       session.append(assistantMessage);

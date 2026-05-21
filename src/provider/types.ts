@@ -9,6 +9,7 @@ export interface ToolCall {
 export interface ChatMessage {
   role: "system" | "user" | "assistant" | "tool";
   content: string;
+  reasoningContent?: string;
   toolCalls?: ToolCall[];
   toolCallId?: string;
 }
@@ -27,6 +28,7 @@ export interface TokenUsage {
 
 export type StreamEvent =
   | { type: "text"; delta: string }
+  | { type: "reasoning"; delta: string }
   | { type: "tool_call"; toolCall: ToolCall }
   | { type: "usage"; usage: TokenUsage }
   | { type: "done"; finishReason: "stop" | "tool_calls" | "length" };

@@ -61,7 +61,8 @@ export function estimateTextTokens(text: string): number {
 export function estimateMessageTokens(message: ChatMessage): number {
   const toolCalls = message.toolCalls && message.toolCalls.length > 0 ? JSON.stringify(message.toolCalls) : "";
   const toolCallId = message.toolCallId ?? "";
-  return 4 + estimateTextTokens(message.role) + estimateTextTokens(message.content) + estimateTextTokens(toolCalls) + estimateTextTokens(toolCallId);
+  const reasoningContent = message.reasoningContent ?? "";
+  return 4 + estimateTextTokens(message.role) + estimateTextTokens(message.content) + estimateTextTokens(reasoningContent) + estimateTextTokens(toolCalls) + estimateTextTokens(toolCallId);
 }
 
 export function estimateMessagesTokenCount(messages: ChatMessage[], systemPrompt = ""): number {
@@ -169,7 +170,7 @@ async function collectSummary(
 
 export function makeCompactionSummaryMessage(summary: string): ChatMessage {
   return {
-    role: "system",
+    role: "user",
     content: `${COMPACTION_SUMMARY_PREFIX}\n${summary.trim()}`
   };
 }

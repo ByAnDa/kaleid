@@ -4,7 +4,7 @@ import { DEFAULT_REASONING_EFFORT, type ReasoningEffort } from "./models.js";
 type ResponsesInputItem =
   | {
       type: "message";
-      role: "user" | "assistant" | "system";
+      role: "user" | "assistant";
       content: Array<{ type: "input_text" | "output_text"; text: string }>;
     }
   | {
@@ -53,6 +53,10 @@ export function encodeMessages(messages: ChatMessage[]): ResponsesInputItem[] {
         call_id: message.toolCallId,
         output: message.content
       });
+      continue;
+    }
+
+    if (message.role === "system") {
       continue;
     }
 
