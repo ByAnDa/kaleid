@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "description": "A terminal coding harness agent for OpenAI Codex OAuth.",
   "type": "module",
-  "license": "MIT",
+  "license": "UNLICENSED",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/ByAnDa/kaleid.git"
