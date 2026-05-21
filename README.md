@@ -1,33 +1,51 @@
 # kaleid
 
-kaleid is a terminal coding harness agent. It provides an OpenAI Codex OAuth
-provider, read/write/edit/bash tools, an agent loop, and a small Ink TUI.
+A minimal terminal coding agent. kaleid signs in to OpenAI through your ChatGPT
+account (Codex OAuth), gives the model `read` / `write` / `edit` / `bash` tools,
+and runs an agent loop inside a small [Ink](https://github.com/vadimdemedes/ink)
+TUI — hand it a task in your terminal and watch it work.
 
-## Install
+## Features
+
+- Sign in with your ChatGPT account (Codex OAuth) — no API key required
+- Built-in tools: `read`, `write`, `edit`, `bash`
+- Interactive REPL with slash commands, plus a one-shot mode for scripts
+- Single global install, default model `gpt-5.5`
+
+## Quick Start
+
+Requires Node.js >= 22.
 
 ```bash
 npm i -g kaleid
+kaleid            # start the interactive REPL
 ```
 
-## Usage
+Inside the REPL, type `/` to see the command menu:
+
+| Command | Description |
+|---------|-------------|
+| `/login`  | Sign in with your ChatGPT account (opens the browser) |
+| `/logout` | Sign out |
+| `/help`   | List commands |
+| `/exit`   | Quit |
+
+Anything that doesn't start with `/` is sent to the agent.
+
+One-shot (non-interactive):
 
 ```bash
-kaleid
 kaleid "read package.json and summarize the scripts"
-kaleid -p "read package.json and summarize the scripts"
 ```
 
-Run `kaleid` and use `/login` in the REPL to complete the browser OAuth flow.
-Use `/logout`, `/exit`, and `/help` from the same REPL. Credentials are stored
-only on your machine at `~/.kaleid/auth.json`.
-
-The default model is `gpt-5.5`. Use `--model <id>` to override it for a run.
+Override the model for a run with `--model <id>`. Credentials are stored only on
+your machine at `~/.kaleid/auth.json`.
 
 ## Disclaimer
 
-kaleid uses ChatGPT OAuth for OpenAI Codex access and is subject to the
-applicable OpenAI policies and account terms. It is not bundled with API keys,
-ChatGPT credentials, or subscription access.
+kaleid uses ChatGPT OAuth for OpenAI Codex access and is subject to OpenAI's
+policies and your account terms. It does not bundle API keys, ChatGPT
+credentials, or subscription access.
 
 ## Development
 
@@ -37,3 +55,8 @@ npm run typecheck
 npm test
 npm run build
 ```
+
+## License
+
+All rights reserved (UNLICENSED). You may install and use the published CLI; the
+source is not licensed for redistribution or modification.
