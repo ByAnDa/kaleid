@@ -2,9 +2,10 @@ import assert from "node:assert/strict";
 import { mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { PassThrough, Writable } from "node:stream";
 import test from "node:test";
 import { parseArgs } from "../src/cli/args.js";
-import { decodeAccountId, refresh } from "../src/auth/oauth.js";
+import { decodeAccountId, login, refresh, systemOpenBrowser } from "../src/auth/oauth.js";
 import { ensureValid, load, save, type Creds } from "../src/auth/token-store.js";
 import { buildRequestBody } from "../src/provider/responses-encode.js";
 import { parseResponsesSSE } from "../src/provider/responses-sse.js";
@@ -92,6 +93,57 @@ test("OAuth helpers decode account ids and refresh via mocked token endpoint", a
   assert.equal(sawRefreshGrant, true);
   assert.equal(creds.accountId, "acct_2");
   assert.equal(creds.refresh, "refresh_2");
+});
+
+test("OAuth login prints the authorization URL and accepts manual code when the opener fails", async () => {
+  const stdin = new PassThrough() as unknown as NodeJS.ReadStream;
+  Object.defineProperty(stdin, "isTTY", { value: true });
+  stdin.end("manual_code\n");
+
+  const stdoutChunks: string[] = [];
+  const stdout = new Writable({
+    write(chunk, _encoding, callback) {
+      stdoutChunks.push(String(chunk));
+      callback();
+    }
+  }) as NodeJS.WriteStream;
+
+  let sawManualCode = false;
+  const creds = await login({
+    openBrowser: () => false,
+    stdin,
+    stdout,
+    fetchImpl: async (_url, init) => {
+      const body = init?.body as URLSearchParams;
+      sawManualCode = body.get("grant_type") === "authorization_code" && body.get("code") === "manual_code";
+      return new Response(
+        JSON.stringify({ access_token: fakeJwt("acct_manual"), refresh_token: "refresh_manual", expires_in: 3600 }),
+        { status: 200, headers: { "Content-Type": "application/json" } }
+      );
+    }
+  });
+
+  const stdoutText = stdoutChunks.join("");
+  assert.match(stdoutText, /Open this URL to authenticate:/u);
+  assert.match(stdoutText, /Paste OAuth code or callback URL:/u);
+  assert.equal(sawManualCode, true);
+  assert.equal(creds.accountId, "acct_manual");
+});
+
+test("system opener reports failure instead of throwing when the opener binary is missing", async () => {
+  const oldPath = process.env.PATH;
+  const emptyPath = await mkdtemp(join(tmpdir(), "kaleid-empty-path-"));
+  process.env.PATH = emptyPath;
+  try {
+    assert.equal(await systemOpenBrowser("https://example.com/"), false);
+  } finally {
+    if (oldPath === undefined) {
+      delete process.env.PATH;
+    } else {
+      process.env.PATH = oldPath;
+    }
+    await rm(emptyPath, { recursive: true, force: true });
+  }
 });
 
 test("token store saves 0600 credentials and refreshes expired credentials with a mock", async () => {

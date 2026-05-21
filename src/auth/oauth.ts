@@ -86,7 +86,7 @@ export function parseAuthorizationResponse(input: string, expectedState: string)
   return trimmed;
 }
 
-function systemOpenBrowser(url: string): boolean {
+export async function systemOpenBrowser(url: string): Promise<boolean> {
   const command =
     process.platform === "darwin"
       ? "open"
@@ -100,8 +100,22 @@ function systemOpenBrowser(url: string): boolean {
       detached: true,
       stdio: "ignore"
     });
-    child.unref();
-    return true;
+
+    return await new Promise<boolean>((resolve) => {
+      let settled = false;
+      const settle = (opened: boolean) => {
+        if (!settled) {
+          settled = true;
+          resolve(opened);
+        }
+      };
+
+      child.once("error", () => settle(false));
+      child.once("spawn", () => {
+        child.unref();
+        settle(true);
+      });
+    });
   } catch {
     return false;
   }
