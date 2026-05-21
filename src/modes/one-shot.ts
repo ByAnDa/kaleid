@@ -1,6 +1,6 @@
 import { createSession } from "../loop/session.js";
 import { runTurn } from "../loop/agent-loop.js";
-import { OpenAICodexProvider } from "../provider/openai-codex.js";
+import { createProviderForModel, getAuthenticatedModels } from "../provider/registry.js";
 import { tools } from "../tools/index.js";
 
 export interface OneShotOptions {
@@ -20,7 +20,8 @@ export async function runOneShot(options: OneShotOptions): Promise<number> {
   const stdout = options.stdout ?? process.stdout;
   const stderr = options.stderr ?? process.stderr;
   const session = createSession();
-  const provider = new OpenAICodexProvider();
+  const availableModels = await getAuthenticatedModels();
+  const provider = await createProviderForModel(options.model, availableModels);
 
   for await (const event of runTurn(session, options.prompt, {
     provider,

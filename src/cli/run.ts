@@ -2,6 +2,7 @@ import { parseArgs, USAGE } from "./args.js";
 import { ensureValid as defaultEnsureValid, NotLoggedInError } from "../auth/token-store.js";
 import { runOneShot as defaultRunOneShot } from "../modes/one-shot.js";
 import { runRepl as defaultRunRepl } from "../modes/repl.js";
+import { ensureModelProviderAuthenticated as defaultEnsureModelProviderAuthenticated } from "../provider/registry.js";
 
 export const ONE_SHOT_LOGIN_HINT = "请先运行 `kaleid` 并执行 `/login` 登录\n";
 
@@ -13,6 +14,7 @@ export interface CliRuntime {
 
 export interface CliDeps {
   ensureValid?: typeof defaultEnsureValid;
+  ensureCanUseModel?: (model: string) => Promise<void>;
   packageVersion: string;
   runOneShot?: typeof defaultRunOneShot;
   runRepl?: typeof defaultRunRepl;
@@ -23,6 +25,13 @@ export async function runCli(argv: string[], deps: CliDeps, runtime: CliRuntime 
   const stderr = runtime.stderr ?? process.stderr;
   const cwd = runtime.cwd ?? process.cwd();
   const ensureValid = deps.ensureValid ?? defaultEnsureValid;
+  const ensureCanUseModel =
+    deps.ensureCanUseModel ??
+    (deps.ensureValid
+      ? async () => {
+          await ensureValid();
+        }
+      : defaultEnsureModelProviderAuthenticated);
   const runOneShot = deps.runOneShot ?? defaultRunOneShot;
   const runRepl = deps.runRepl ?? defaultRunRepl;
 
@@ -46,9 +55,9 @@ export async function runCli(argv: string[], deps: CliDeps, runtime: CliRuntime 
 
   if (args.command === "oneshot") {
     try {
-      await ensureValid();
+      await ensureCanUseModel(args.model);
     } catch (error) {
-      if (error instanceof NotLoggedInError) {
+      if (error instanceof NotLoggedInError || (error instanceof Error && /Not logged in/u.test(error.message))) {
         stderr.write(ONE_SHOT_LOGIN_HINT);
         return 1;
       }

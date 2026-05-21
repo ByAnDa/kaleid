@@ -5,6 +5,7 @@ export interface OptionSelectorItem {
   id: string;
   label?: string;
   current: boolean;
+  provider?: string;
 }
 
 export interface OptionSelectorProps {

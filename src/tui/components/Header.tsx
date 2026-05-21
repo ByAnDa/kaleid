@@ -1,17 +1,23 @@
 import React from "react";
 import { Box, Text } from "ink";
-import type { ReasoningEffort } from "../../provider/models.js";
+import { providerLabel, type ProviderId, type ReasoningEffort } from "../../provider/models.js";
 
 export const HEADER_HEIGHT = 3;
 
 export interface HeaderProps {
   model: string;
-  reasoningEffort: ReasoningEffort;
+  provider?: ProviderId;
+  reasoningEffort: ReasoningEffort | null;
   width: number;
 }
 
-export function formatHeaderState(model: string, reasoningEffort: ReasoningEffort): string {
-  return `${model} · ${reasoningEffort}`;
+export function formatHeaderState(
+  model: string,
+  reasoningEffort: ReasoningEffort | null,
+  provider?: ProviderId
+): string {
+  const suffix = provider ? ` ${providerLabel(provider)}` : "";
+  return `${model}${suffix} · ${reasoningEffort ?? "-"}`;
 }
 
 export function truncateHeaderState(value: string, maxWidth: number): string {
@@ -26,10 +32,10 @@ export function truncateHeaderState(value: string, maxWidth: number): string {
   return `${value.slice(0, maxWidth - 3)}...`;
 }
 
-export function Header({ model, reasoningEffort, width }: HeaderProps): React.ReactElement {
+export function Header({ model, provider, reasoningEffort, width }: HeaderProps): React.ReactElement {
   const maxStateWidth = Math.max(0, width - 14);
   const showState = maxStateWidth >= 10;
-  const state = truncateHeaderState(formatHeaderState(model, reasoningEffort), maxStateWidth);
+  const state = truncateHeaderState(formatHeaderState(model, reasoningEffort, provider), maxStateWidth);
 
   return (
     <Box borderStyle="round" borderColor="cyan" flexShrink={0} height={HEADER_HEIGHT} paddingX={1} width={width}>

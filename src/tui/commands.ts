@@ -1,7 +1,8 @@
 import { login as defaultLogin, type OAuthOptions } from "../auth/oauth.js";
+import { clearApiKeys as defaultClearApiKeys } from "../auth/config-store.js";
 import {
   load as defaultLoad,
-  logout as defaultLogout,
+  logout as defaultCodexLogout,
   save as defaultSave,
   type Creds
 } from "../auth/token-store.js";
@@ -35,8 +36,8 @@ export interface SlashCommandContext {
 }
 
 export const SLASH_COMMANDS: SlashCommandDefinition[] = [
-  { command: "/login", description: "Sign in with OpenAI OAuth" },
-  { command: "/logout", description: "Sign out and remove ~/.kaleid/auth.json" },
+  { command: "/login", description: "Sign in to a provider" },
+  { command: "/logout", description: "Sign out and remove kaleid credentials" },
   { command: "/model", description: "Select the current model" },
   { command: "/reasoning", description: "Select reasoning effort" },
   { command: "/exit", description: "Exit kaleid" },
@@ -71,7 +72,12 @@ export async function runSlashCommand(
 ): Promise<SlashCommandResult> {
   const login = context.login ?? defaultLogin;
   const load = context.load ?? defaultLoad;
-  const logout = context.logout ?? defaultLogout;
+  const logout =
+    context.logout ??
+    (async () => {
+      await defaultCodexLogout();
+      await defaultClearApiKeys();
+    });
   const save = context.save ?? defaultSave;
 
   if (parsed.command === "/help") {
@@ -92,7 +98,7 @@ export async function runSlashCommand(
     await logout();
     return {
       action: "continue",
-      messages: ["已登出。后续请使用 /login 登录。"]
+      messages: ["已登出所有 provider。后续请使用 /login 登录。"]
     };
   }
 
@@ -107,12 +113,12 @@ export async function runSlashCommand(
     const messages: string[] = [];
     const existing = await load();
     if (existing) {
-      messages.push(`已登录为 ${existing.accountId}，开始重新登录...`);
+      messages.push(`已登录 OpenAI Codex 为 ${existing.accountId}，开始重新登录...`);
     }
 
     const creds = await login(context.loginOptions);
     await save(creds);
-    messages.push(`登录成功: ${creds.accountId}`);
+    messages.push(`已登录: openai-codex (${creds.accountId})`);
     return {
       action: "continue",
       messages

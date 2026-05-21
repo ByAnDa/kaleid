@@ -1,14 +1,21 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Box, useApp, useInput } from "ink";
+import { saveApiKey, type ApiKeyProviderId } from "../auth/config-store.js";
 import type { runTurn as runTurnFn } from "../loop/agent-loop.js";
 import type { Session } from "../loop/session.js";
 import {
   DEFAULT_REASONING_EFFORT,
   REASONING_LEVELS,
+  getProviderForModel,
   getModelOptions,
   isReasoningEffort,
+  providerLabel,
+  providerSupportsReasoningEffort,
+  type AvailableModel,
+  type ProviderId,
   type ReasoningEffort
 } from "../provider/models.js";
+import { createProviderForModel, getAuthenticatedModels } from "../provider/registry.js";
 import type { LLMProvider } from "../provider/types.js";
 import type { Tool } from "../tools/types.js";
 import { getSlashCommandCompletions, parseSlash, runSlashCommand } from "./commands.js";
@@ -27,7 +34,9 @@ export interface AppProps {
   model: string;
   cwd: string;
   session: Session;
-  provider: LLMProvider;
+  provider?: LLMProvider;
+  loadAvailableModels?: () => Promise<AvailableModel[]>;
+  resolveProvider?: (model: string, models: AvailableModel[]) => Promise<LLMProvider>;
   tools: Tool[];
   runTurn: typeof runTurnFn;
 }
@@ -40,13 +49,14 @@ function nextId(): string {
   return crypto.randomUUID();
 }
 
-export type SelectorKind = "model" | "reasoning";
+export type SelectorKind = "model" | "reasoning" | "login";
 export type SelectorFlow = "standalone" | "modelEffortChain";
 
 export interface SelectorTransitionInput {
   activeSelector: SelectorKind;
   selectorFlow: SelectorFlow;
   selectedId: string;
+  selectedProvider?: ProviderId;
   currentModel: string;
   reasoningEffort: ReasoningEffort;
 }
@@ -79,15 +89,41 @@ function getCurrentIndex(options: OptionSelectorItem[]): number {
   return currentIndex >= 0 ? currentIndex : 0;
 }
 
+function modelToOption(currentModel: string, model: AvailableModel): OptionSelectorItem {
+  return {
+    id: model.id,
+    label: model.label,
+    provider: model.provider,
+    current: model.id === currentModel
+  };
+}
+
+function buildModelOptions(currentModel: string, models: AvailableModel[]): OptionSelectorItem[] {
+  const options = models.length > 0 ? models : getModelOptions(currentModel, models);
+  return options.map((model) => modelToOption(currentModel, model));
+}
+
+const LOGIN_OPTIONS: OptionSelectorItem[] = [
+  { id: "openai-codex", label: "OpenAI Codex OAuth", provider: "openai-codex", current: false },
+  { id: "deepseek", label: "DeepSeek API key", provider: "deepseek", current: false },
+  { id: "kimi", label: "Kimi coding API key", provider: "kimi", current: false }
+];
+
 export function applySelectorTransition(input: SelectorTransitionInput): SelectorTransition {
   if (input.activeSelector === "model") {
-    const shouldSelectEffort = input.selectorFlow === "modelEffortChain";
+    const supportsEffort = providerSupportsReasoningEffort(input.selectedProvider);
+    const shouldSelectEffort = input.selectorFlow === "modelEffortChain" && supportsEffort;
+    const modelLabel = input.selectedProvider ? `${input.selectedId} ${providerLabel(input.selectedProvider)}` : input.selectedId;
     return {
       currentModel: input.selectedId,
       reasoningEffort: input.reasoningEffort,
       nextSelector: shouldSelectEffort ? "reasoning" : null,
       nextSelectorFlow: shouldSelectEffort ? "modelEffortChain" : "standalone",
-      message: shouldSelectEffort ? null : `已切换模型: ${input.selectedId}`
+      message: shouldSelectEffort
+        ? null
+        : supportsEffort
+          ? `已切换模型: ${modelLabel}`
+          : `已设置模型: ${modelLabel}; 推理强度 N/A`
     };
   }
 
@@ -129,7 +165,12 @@ export function cancelSelectorTransition(input: SelectorCancelInput): SelectorTr
     reasoningEffort: input.reasoningEffort,
     nextSelector: null,
     nextSelectorFlow: "standalone",
-    message: input.activeSelector === "model" ? "已取消模型选择" : "已取消推理强度选择"
+    message:
+      input.activeSelector === "model"
+        ? "已取消模型选择"
+        : input.activeSelector === "login"
+          ? "已取消登录"
+          : "已取消推理强度选择"
   };
 }
 
@@ -152,15 +193,26 @@ function useTerminalDimensions(): TerminalDimensions {
   return dimensions;
 }
 
-export function App({ model, cwd, session, provider, tools, runTurn }: AppProps): React.ReactElement {
+export function App({
+  model,
+  cwd,
+  session,
+  provider,
+  loadAvailableModels = getAuthenticatedModels,
+  resolveProvider = createProviderForModel,
+  tools,
+  runTurn
+}: AppProps): React.ReactElement {
   const { exit } = useApp();
   const terminal = useTerminalDimensions();
   const [currentModel, setCurrentModel] = useState(model);
+  const [availableModels, setAvailableModels] = useState<AvailableModel[]>([]);
   const [reasoningEffort, setReasoningEffort] = useState<ReasoningEffort>(DEFAULT_REASONING_EFFORT);
   const [history, setHistory] = useState<Msg[]>([]);
   const [streaming, setStreaming] = useState<string | null>(null);
   const [status, setStatus] = useState<string | null>(null);
   const [input, setInput] = useState("");
+  const [manualInputMask, setManualInputMask] = useState<string | undefined>(undefined);
   const [slashMenuOpen, setSlashMenuOpen] = useState(false);
   const [slashMenuIndex, setSlashMenuIndex] = useState(0);
   const [activeSelector, setActiveSelector] = useState<SelectorKind | null>(null);
@@ -174,14 +226,13 @@ export function App({ model, cwd, session, provider, tools, runTurn }: AppProps)
   const slashCandidates = slashCompletions ?? [];
   const slashMenuVisible = !busy && !manualCodePrompt && !activeSelector && slashMenuOpen && slashCompletions !== null;
   const selectedSlashIndex = slashCandidates.length === 0 ? -1 : Math.min(slashMenuIndex, slashCandidates.length - 1);
+  const currentProvider = useMemo(
+    () => getProviderForModel(currentModel, availableModels),
+    [availableModels, currentModel]
+  );
   const modelOptions = useMemo<OptionSelectorItem[]>(
-    () =>
-      getModelOptions(currentModel).map((option) => ({
-        id: option.id,
-        label: option.label,
-        current: option.id === currentModel
-      })),
-    [currentModel]
+    () => buildModelOptions(currentModel, availableModels),
+    [availableModels, currentModel]
   );
   const reasoningOptions = useMemo<OptionSelectorItem[]>(
     () =>
@@ -191,7 +242,8 @@ export function App({ model, cwd, session, provider, tools, runTurn }: AppProps)
       })),
     [reasoningEffort]
   );
-  const selectorOptions = activeSelector === "model" ? modelOptions : activeSelector === "reasoning" ? reasoningOptions : [];
+  const selectorOptions =
+    activeSelector === "model" ? modelOptions : activeSelector === "reasoning" ? reasoningOptions : activeSelector === "login" ? LOGIN_OPTIONS : [];
   const selectedSelectorIndex =
     selectorOptions.length === 0 ? -1 : Math.min(selectorIndex, selectorOptions.length - 1);
   const selectorVisible = activeSelector !== null;
@@ -237,8 +289,13 @@ export function App({ model, cwd, session, provider, tools, runTurn }: AppProps)
   }, [selectedSlashIndex, slashCandidates]);
 
   const openSelector = useCallback(
-    (kind: SelectorKind, flow: SelectorFlow = "standalone") => {
-      const options = kind === "model" ? modelOptions : reasoningOptions;
+    (kind: SelectorKind, flow: SelectorFlow = "standalone", modelsOverride?: AvailableModel[]) => {
+      const options =
+        kind === "model"
+          ? buildModelOptions(currentModel, modelsOverride ?? availableModels)
+          : kind === "reasoning"
+            ? reasoningOptions
+            : LOGIN_OPTIONS;
       setInput("");
       setSlashMenuOpen(false);
       setSlashMenuIndex(0);
@@ -246,7 +303,7 @@ export function App({ model, cwd, session, provider, tools, runTurn }: AppProps)
       setSelectorFlow(flow);
       setSelectorIndex(getCurrentIndex(options));
     },
-    [modelOptions, reasoningOptions]
+    [availableModels, currentModel, reasoningOptions]
   );
 
   const closeSelector = useCallback(() => {
@@ -255,6 +312,70 @@ export function App({ model, cwd, session, provider, tools, runTurn }: AppProps)
     setSelectorIndex(0);
   }, []);
 
+  const startManualInput = useCallback((prompt: string, mask?: string) => {
+    setInput("");
+    setSlashMenuOpen(false);
+    setManualCodePrompt(prompt);
+    setManualInputMask(mask);
+    return new Promise<string>((resolve, reject) => {
+      manualCodeRef.current = { resolve, reject };
+    });
+  }, []);
+
+  const startManualCodeInput = useCallback(
+    () => startManualInput("粘贴 OAuth code 或回调 URL，回车提交"),
+    [startManualInput]
+  );
+
+  const runLoginFlow = useCallback(
+    async (selectedProvider: ProviderId) => {
+      closeSelector();
+      setBusy(true);
+      setStatus(`logging in ${selectedProvider}...`);
+
+      try {
+        if (selectedProvider === "openai-codex") {
+          const result = await runSlashCommand(
+            { command: "/login", args: [] },
+            {
+              loginOptions: {
+                onAuthUrl: (url) => {
+                  commit({
+                    id: nextId(),
+                    role: "system",
+                    text: `请在浏览器完成授权（已尝试自动打开）。如未打开，手动复制此链接：\n${url}`
+                  });
+                },
+                onStatus: setStatus,
+                getManualCode: startManualCodeInput
+              }
+            }
+          );
+          for (const text of result.messages) {
+            commit({ id: nextId(), role: "system", text });
+          }
+        } else {
+          const apiProvider = selectedProvider as ApiKeyProviderId;
+          const key = await startManualInput(`粘贴 ${providerLabel(apiProvider)} API key，回车保存`, "*");
+          await saveApiKey(apiProvider, key);
+          commit({ id: nextId(), role: "system", text: `已登录: ${apiProvider}` });
+        }
+
+        const refreshedModels = await loadAvailableModels();
+        setAvailableModels(refreshedModels);
+      } catch (error) {
+        commit({ id: nextId(), role: "error", text: error instanceof Error ? error.message : String(error) });
+      } finally {
+        manualCodeRef.current = null;
+        setManualCodePrompt(null);
+        setManualInputMask(undefined);
+        setBusy(false);
+        setStatus(null);
+      }
+    },
+    [closeSelector, commit, loadAvailableModels, startManualCodeInput, startManualInput]
+  );
+
   const applySelector = useCallback(() => {
     const selected = selectorOptions[selectedSelectorIndex];
     if (!activeSelector || !selected) {
@@ -262,10 +383,16 @@ export function App({ model, cwd, session, provider, tools, runTurn }: AppProps)
       return;
     }
 
+    if (activeSelector === "login") {
+      void runLoginFlow(selected.id as ProviderId);
+      return;
+    }
+
     const transition = applySelectorTransition({
       activeSelector,
       selectorFlow,
       selectedId: selected.id,
+      selectedProvider: selected.provider as ProviderId | undefined,
       currentModel,
       reasoningEffort
     });
@@ -292,6 +419,7 @@ export function App({ model, cwd, session, provider, tools, runTurn }: AppProps)
     modelOptions,
     reasoningEffort,
     reasoningOptions,
+    runLoginFlow,
     selectedSelectorIndex,
     selectorFlow,
     selectorOptions
@@ -300,9 +428,10 @@ export function App({ model, cwd, session, provider, tools, runTurn }: AppProps)
   useInput((value, key) => {
     if (key.ctrl && value === "c") {
       if (busy) {
-        manualCodeRef.current?.reject(new Error("OAuth login cancelled"));
+        manualCodeRef.current?.reject(new Error("input cancelled"));
         manualCodeRef.current = null;
         setManualCodePrompt(null);
+        setManualInputMask(undefined);
         setInput("");
         abortRef.current?.abort();
         setStatus("aborting...");
@@ -367,15 +496,6 @@ export function App({ model, cwd, session, provider, tools, runTurn }: AppProps)
     }
   });
 
-  const startManualCodeInput = useCallback(() => {
-    setInput("");
-    setSlashMenuOpen(false);
-    setManualCodePrompt("粘贴 OAuth code 或回调 URL，回车提交");
-    return new Promise<string>((resolve, reject) => {
-      manualCodeRef.current = { resolve, reject };
-    });
-  }, []);
-
   const submit = useCallback(
     async (value: string) => {
       if (manualCodePrompt) {
@@ -386,6 +506,7 @@ export function App({ model, cwd, session, provider, tools, runTurn }: AppProps)
         const pending = manualCodeRef.current;
         manualCodeRef.current = null;
         setManualCodePrompt(null);
+        setManualInputMask(undefined);
         setInput("");
         pending?.resolve(value);
         return;
@@ -400,38 +521,55 @@ export function App({ model, cwd, session, provider, tools, runTurn }: AppProps)
 
       const slash = parseSlash(value);
       if (slash) {
+        if (slash.command === "/login") {
+          openSelector("login");
+          return;
+        }
+
         if (slash.command === "/model") {
-          openSelector("model", "modelEffortChain");
+          setSlashMenuOpen(false);
+          setBusy(true);
+          setStatus("loading models...");
+          try {
+            const refreshedModels = await loadAvailableModels();
+            setAvailableModels(refreshedModels);
+            if (refreshedModels.length === 0) {
+              commit({ id: nextId(), role: "system", text: "未登录任何 provider，请先 /login。" });
+            } else {
+              openSelector("model", "modelEffortChain", refreshedModels);
+            }
+          } catch (error) {
+            commit({ id: nextId(), role: "error", text: error instanceof Error ? error.message : String(error) });
+          } finally {
+            setBusy(false);
+            setStatus(null);
+          }
           return;
         }
 
         if (slash.command === "/reasoning") {
+          if (!providerSupportsReasoningEffort(currentProvider)) {
+            commit({
+              id: nextId(),
+              role: "system",
+              text: `${providerLabel(currentProvider)} 不支持 reasoning effort。`
+            });
+            return;
+          }
           openSelector("reasoning");
           return;
         }
 
-        const isLoginCommand = slash.command === "/login";
         setSlashMenuOpen(false);
         setBusy(true);
         setStatus(`running ${slash.command}...`);
         try {
-          const result = await runSlashCommand(slash, {
-            loginOptions: isLoginCommand
-              ? {
-                  onAuthUrl: (url) => {
-                    commit({
-                      id: nextId(),
-                      role: "system",
-                      text: `请在浏览器完成授权（已尝试自动打开）。如未打开，手动复制此链接：\n${url}`
-                    });
-                  },
-                  onStatus: setStatus,
-                  getManualCode: startManualCodeInput
-                }
-              : undefined
-          });
+          const result = await runSlashCommand(slash);
           for (const text of result.messages) {
             commit({ id: nextId(), role: "system", text });
+          }
+          if (slash.command === "/logout") {
+            setAvailableModels([]);
           }
           if (result.action === "exit") {
             exit();
@@ -441,6 +579,7 @@ export function App({ model, cwd, session, provider, tools, runTurn }: AppProps)
         } finally {
           manualCodeRef.current = null;
           setManualCodePrompt(null);
+          setManualInputMask(undefined);
           setBusy(false);
           setStatus(null);
         }
@@ -464,11 +603,17 @@ export function App({ model, cwd, session, provider, tools, runTurn }: AppProps)
       };
 
       try {
+        const turnModels = availableModels.length > 0 ? availableModels : await loadAvailableModels().catch(() => []);
+        if (turnModels.length > 0) {
+          setAvailableModels(turnModels);
+        }
+        const turnProvider = provider ?? (await resolveProvider(currentModel, turnModels));
+        const turnProviderId = getProviderForModel(currentModel, turnModels);
         for await (const event of runTurn(session, prompt, {
-          provider,
+          provider: turnProvider,
           tools,
           model: currentModel,
-          reasoningEffort,
+          reasoningEffort: providerSupportsReasoningEffort(turnProviderId) ? reasoningEffort : undefined,
           cwd,
           signal: abort.signal
         })) {
@@ -512,15 +657,18 @@ export function App({ model, cwd, session, provider, tools, runTurn }: AppProps)
       busy,
       commit,
       currentModel,
+      currentProvider,
       cwd,
       exit,
+      availableModels,
+      loadAvailableModels,
       manualCodePrompt,
       openSelector,
       provider,
       reasoningEffort,
+      resolveProvider,
       runTurn,
       session,
-      startManualCodeInput,
       tools,
       updateInput
     ]
@@ -545,13 +693,24 @@ export function App({ model, cwd, session, provider, tools, runTurn }: AppProps)
 
   return (
     <Box flexDirection="column" height={terminal.rows} width={terminal.columns}>
-      <Header model={currentModel} reasoningEffort={reasoningEffort} width={terminal.columns} />
+      <Header
+        model={currentModel}
+        provider={currentProvider}
+        reasoningEffort={providerSupportsReasoningEffort(currentProvider) ? reasoningEffort : null}
+        width={terminal.columns}
+      />
       <Conversation height={conversationHeight} messages={history} streaming={streaming} width={terminal.columns} />
       {selectorVisible ? (
         <OptionSelector
           options={selectorOptions}
           selectedIndex={selectedSelectorIndex}
-          title={activeSelector === "model" ? "Select model" : "Select reasoning effort"}
+          title={
+            activeSelector === "model"
+              ? "Select model"
+              : activeSelector === "login"
+                ? "Select provider"
+                : "Select reasoning effort"
+          }
           width={terminal.columns}
         />
       ) : null}
@@ -559,6 +718,7 @@ export function App({ model, cwd, session, provider, tools, runTurn }: AppProps)
         disabled={selectorVisible || (busy && !manualCodePrompt)}
         disabledLabel={selectorVisible ? "" : undefined}
         input={input}
+        inputMask={manualInputMask}
         manualCodePrompt={manualCodePrompt}
         onChange={updateInput}
         onSubmit={slashMenuVisible || selectorVisible ? undefined : submit}

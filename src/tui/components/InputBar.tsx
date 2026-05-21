@@ -23,6 +23,7 @@ export interface InputBarProps extends InputBarLayoutState {
   disabled: boolean;
   disabledLabel?: string;
   input: string;
+  inputMask?: string;
   onChange: (value: string) => void;
   onSubmit?: (value: string) => void;
   selectedSlashIndex: number;
@@ -34,6 +35,7 @@ export function InputBar({
   disabled,
   disabledLabel,
   input,
+  inputMask,
   manualCodePrompt,
   onChange,
   onSubmit,
@@ -43,7 +45,7 @@ export function InputBar({
   status,
   width
 }: InputBarProps): React.ReactElement {
-  const prompt = manualCodePrompt ? "oauth> " : "› ";
+  const prompt = manualCodePrompt ? "input> " : "› ";
   const borderColor = manualCodePrompt ? "yellow" : disabled ? "gray" : "green";
 
   return (
@@ -62,7 +64,7 @@ export function InputBar({
         {disabled ? (
           <Text color="gray">{disabledLabel ?? status ?? "working..."}</Text>
         ) : (
-          <TextInput value={input} onChange={onChange} onSubmit={onSubmit} />
+          <TextInput value={input} mask={inputMask} onChange={onChange} onSubmit={onSubmit} />
         )}
       </Box>
     </Box>

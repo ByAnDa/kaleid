@@ -7,17 +7,32 @@ import test from "node:test";
 import { parseArgs } from "../src/cli/args.js";
 import { runCli } from "../src/cli/run.js";
 import { decodeAccountId, login, refresh, systemOpenBrowser } from "../src/auth/oauth.js";
+import { getApiKey, loadConfig, saveApiKey, clearApiKeys } from "../src/auth/config-store.js";
 import { ensureValid, load, NotLoggedInError, save, type Creds } from "../src/auth/token-store.js";
+import {
+  buildChatCompletionBody,
+  OpenAICompatProvider,
+  parseChatCompletionsSSE
+} from "../src/provider/openai-compat.js";
 import { buildRequestBody } from "../src/provider/responses-encode.js";
 import { parseResponsesSSE } from "../src/provider/responses-sse.js";
 import { OpenAICodexProvider } from "../src/provider/openai-codex.js";
 import {
   AVAILABLE_MODELS,
+  DEEPSEEK_FALLBACK_MODELS,
   DEFAULT_MODEL,
   DEFAULT_REASONING_EFFORT,
+  KIMI_MODELS,
   REASONING_LEVELS,
+  getProviderForModel,
   getModelOptions
 } from "../src/provider/models.js";
+import {
+  DEEPSEEK_BASE_URL,
+  createProviderForModel,
+  fetchDeepSeekModels,
+  getAuthenticatedModels
+} from "../src/provider/registry.js";
 import type { ChatParams, LLMProvider, StreamEvent } from "../src/provider/types.js";
 import { runTurn } from "../src/loop/agent-loop.js";
 import { createSession } from "../src/loop/session.js";
@@ -71,6 +86,37 @@ async function withTempAuthFile<T>(fn: (file: string) => Promise<T>): Promise<T>
   }
 }
 
+async function withTempConfigFile<T>(fn: (file: string) => Promise<T>): Promise<T> {
+  const oldConfig = process.env.KALEID_CONFIG_FILE;
+  const oldDeepSeek = process.env.DEEPSEEK_API_KEY;
+  const oldKimi = process.env.KIMI_API_KEY;
+  const dir = await mkdtemp(join(tmpdir(), "kaleid-config-"));
+  const file = join(dir, "config.json");
+  process.env.KALEID_CONFIG_FILE = file;
+  delete process.env.DEEPSEEK_API_KEY;
+  delete process.env.KIMI_API_KEY;
+  try {
+    return await fn(file);
+  } finally {
+    if (oldConfig === undefined) {
+      delete process.env.KALEID_CONFIG_FILE;
+    } else {
+      process.env.KALEID_CONFIG_FILE = oldConfig;
+    }
+    if (oldDeepSeek === undefined) {
+      delete process.env.DEEPSEEK_API_KEY;
+    } else {
+      process.env.DEEPSEEK_API_KEY = oldDeepSeek;
+    }
+    if (oldKimi === undefined) {
+      delete process.env.KIMI_API_KEY;
+    } else {
+      process.env.KIMI_API_KEY = oldKimi;
+    }
+    await rm(dir, { recursive: true, force: true });
+  }
+}
+
 function streamFromString(value: string): ReadableStream<Uint8Array> {
   return new ReadableStream<Uint8Array>({
     start(controller) {
@@ -116,8 +162,11 @@ test("model and reasoning constants expose selectable defaults", () => {
   assert.ok(AVAILABLE_MODELS.some((model) => model.id === DEFAULT_MODEL));
   assert.equal(AVAILABLE_MODELS.at(-1)?.id, DEFAULT_MODEL);
   assert.ok(AVAILABLE_MODELS.every((model) => model.label === "[openai-codex]"));
+  assert.ok(AVAILABLE_MODELS.every((model) => model.provider === "openai-codex"));
   assert.equal(AVAILABLE_MODELS.some((model) => model.id === "gpt-5.5-pro"), false);
   assert.equal(AVAILABLE_MODELS.some((model) => model.id === "gpt-5.2-codex"), false);
+  assert.equal(getProviderForModel("deepseek-reasoner"), "deepseek");
+  assert.equal(getProviderForModel("kimi-for-coding"), "kimi");
   assert.deepEqual(REASONING_LEVELS, ["minimal", "low", "medium", "high", "xhigh"]);
   assert.equal(getModelOptions("custom-model")[0]?.id, "custom-model");
   assert.equal(getModelOptions("custom-model")[0]?.label, "custom");
@@ -247,8 +296,8 @@ test("slash command parser and dispatcher handle help, unknown, logout, and logi
   );
 
   assert.equal(saved, freshCreds);
-  assert.match(loginResult.messages.join("\n"), /已登录为 acct_old/u);
-  assert.match(loginResult.messages.join("\n"), /登录成功: acct_new/u);
+  assert.match(loginResult.messages.join("\n"), /已登录 OpenAI Codex 为 acct_old/u);
+  assert.match(loginResult.messages.join("\n"), /已登录: openai-codex \(acct_new\)/u);
 });
 
 test("slash login forwards OAuth callbacks and saves the returned credentials", async () => {
@@ -289,7 +338,7 @@ test("slash login forwards OAuth callbacks and saves the returned credentials", 
 
   assert.equal(saved, freshCreds);
   assert.deepEqual(events, ["url:https://auth.example/", "status:waiting", "manual"]);
-  assert.deepEqual(result.messages, ["登录成功: acct_callback"]);
+  assert.deepEqual(result.messages, ["已登录: openai-codex (acct_callback)"]);
 });
 
 test("TUI fullscreen helpers enter and restore alternate screen for TTY output", () => {
@@ -395,6 +444,7 @@ test("TUI message labels and tool calls use distinct visual roles", () => {
 
 test("TUI header and option selector format model and reasoning state", () => {
   assert.equal(formatHeaderState("gpt-5.5", "high"), "gpt-5.5 · high");
+  assert.equal(formatHeaderState("kimi-for-coding", null, "kimi"), "kimi-for-coding [kimi] · -");
   assert.equal(truncateHeaderState("gpt-5.5-pro · medium", 12), "gpt-5.5-p...");
   assert.equal(getOptionSelectorHeight(5), 8);
   assert.equal(
@@ -435,6 +485,25 @@ test("TUI selector transitions chain model selection into reasoning effort", () 
     nextSelector: null,
     nextSelectorFlow: "standalone",
     message: "已设置: gpt-5.4 · high"
+  });
+});
+
+test("TUI selector skips reasoning effort for non-Codex providers", () => {
+  const modelStep = applySelectorTransition({
+    activeSelector: "model",
+    selectorFlow: "modelEffortChain",
+    selectedId: "deepseek-v4-pro",
+    selectedProvider: "deepseek",
+    currentModel: "gpt-5.5",
+    reasoningEffort: "medium"
+  });
+
+  assert.deepEqual(modelStep, {
+    currentModel: "deepseek-v4-pro",
+    reasoningEffort: "medium",
+    nextSelector: null,
+    nextSelectorFlow: "standalone",
+    message: "已设置模型: deepseek-v4-pro [deepseek]; 推理强度 N/A"
   });
 });
 
@@ -644,6 +713,88 @@ test("token store saves 0600 credentials and refreshes expired credentials with 
   });
 });
 
+test("config store saves provider API keys with env override and 0600 permissions", async () => {
+  await withTempConfigFile(async (file) => {
+    await saveApiKey("deepseek", "sk-deepseek");
+    assert.deepEqual(await loadConfig(), { deepseek: { apiKey: "sk-deepseek" } });
+    assert.equal(await getApiKey("deepseek"), "sk-deepseek");
+    assert.equal((await stat(file)).mode & 0o777, 0o600);
+
+    process.env.DEEPSEEK_API_KEY = "sk-env";
+    assert.equal(await getApiKey("deepseek"), "sk-env");
+    delete process.env.DEEPSEEK_API_KEY;
+
+    await saveApiKey("kimi", "sk-kimi");
+    assert.equal(await getApiKey("kimi"), "sk-kimi");
+
+    await clearApiKeys("deepseek");
+    assert.equal(await getApiKey("deepseek"), null);
+    assert.equal(await getApiKey("kimi"), "sk-kimi");
+
+    await clearApiKeys();
+    assert.deepEqual(await loadConfig(), {});
+  });
+});
+
+test("authenticated model registry filters providers and falls back for DeepSeek models", async () => {
+  await withTempAuthFile(async () => {
+    await withTempConfigFile(async () => {
+      await save({
+        access: fakeJwt("acct_models"),
+        refresh: "refresh_models",
+        expires: Date.now() + 1000,
+        accountId: "acct_models"
+      });
+      await saveApiKey("deepseek", "sk-deepseek");
+      await saveApiKey("kimi", "sk-kimi");
+
+      const dynamicModels = await getAuthenticatedModels({
+        fetchImpl: async (url, init) => {
+          assert.equal(url, `${DEEPSEEK_BASE_URL}/models`);
+          assert.equal((init?.headers as Record<string, string>).Authorization, "Bearer sk-deepseek");
+          return new Response(
+            JSON.stringify({ data: [{ id: "deepseek-v4-pro" }, { id: "deepseek-reasoner" }] }),
+            { status: 200, headers: { "Content-Type": "application/json" } }
+          );
+        }
+      });
+
+      assert.ok(dynamicModels.some((model) => model.id === "gpt-5.5" && model.provider === "openai-codex"));
+      assert.ok(dynamicModels.some((model) => model.id === "deepseek-reasoner" && model.provider === "deepseek"));
+      assert.ok(dynamicModels.some((model) => model.id === "kimi-for-coding" && model.provider === "kimi"));
+      assert.equal((await createProviderForModel("deepseek-reasoner", dynamicModels)).id, "deepseek");
+
+      const fallbackModels = await getAuthenticatedModels({
+        fetchImpl: async () => new Response("bad", { status: 500, statusText: "Internal Server Error" })
+      });
+      assert.deepEqual(
+        fallbackModels.filter((model) => model.provider === "deepseek").map((model) => model.id),
+        DEEPSEEK_FALLBACK_MODELS.map((model) => model.id)
+      );
+      assert.deepEqual(
+        fallbackModels.filter((model) => model.provider === "kimi"),
+        KIMI_MODELS
+      );
+    });
+  });
+});
+
+test("DeepSeek model fetch validates OpenAI-compatible /models responses", async () => {
+  const models = await fetchDeepSeekModels("sk-deepseek", async (_url, _init) =>
+    new Response(JSON.stringify({ data: [{ id: "deepseek-v4-flash" }] }), {
+      status: 200,
+      headers: { "Content-Type": "application/json" }
+    })
+  );
+
+  assert.deepEqual(models, [{ id: "deepseek-v4-flash", provider: "deepseek", label: "[deepseek]" }]);
+
+  await assert.rejects(
+    fetchDeepSeekModels("sk-deepseek", async () => new Response(JSON.stringify({ data: [] }), { status: 200 })),
+    /did not include models/u
+  );
+});
+
 test("Responses encoder preserves messages, tool calls, tool outputs, and tool schemas", () => {
   const body = buildRequestBody({
     model: "gpt-5.5",
@@ -711,6 +862,95 @@ test("Responses SSE parser yields text, tool calls, and tool-call finish reason 
     toolCall: { id: "call_1", name: "read", arguments: { path: "package.json" } }
   });
   assert.deepEqual(events[2], { type: "done", finishReason: "tool_calls" });
+});
+
+test("OpenAI-compatible encoder and SSE parser handle chat tools", async () => {
+  const body = buildChatCompletionBody({
+    model: "deepseek-v4-pro",
+    systemPrompt: "system",
+    messages: [
+      { role: "user", content: "read it" },
+      { role: "assistant", content: "", toolCalls: [{ id: "call_1", name: "read", arguments: { path: "a.txt" } }] },
+      { role: "tool", toolCallId: "call_1", content: "ok" }
+    ],
+    tools: [{ name: "read", description: "Read", parameters: { type: "object" } }]
+  });
+
+  const messages = body.messages as Array<Record<string, unknown>>;
+  const tools = body.tools as Array<{ function: Record<string, unknown> }>;
+  assert.deepEqual(messages[0], { role: "system", content: "system" });
+  assert.equal((messages[2]?.tool_calls as Array<Record<string, unknown>>)[0]?.type, "function");
+  assert.deepEqual(messages[3], { role: "tool", tool_call_id: "call_1", content: "ok" });
+  assert.equal(tools[0]?.function.name, "read");
+
+  const fixture = [
+    `data: ${JSON.stringify({ choices: [{ delta: { content: "Need file." } }] })}`,
+    "",
+    `data: ${JSON.stringify({
+      choices: [
+        {
+          delta: {
+            tool_calls: [
+              { index: 0, id: "call_2", function: { name: "read", arguments: "{\"path\"" } }
+            ]
+          }
+        }
+      ]
+    })}`,
+    "",
+    `data: ${JSON.stringify({
+      choices: [
+        {
+          delta: {
+            tool_calls: [{ index: 0, function: { arguments: ":\"package.json\"}" } }]
+          },
+          finish_reason: "tool_calls"
+        }
+      ]
+    })}`,
+    "",
+    "data: [DONE]",
+    "",
+    ""
+  ].join("\n");
+
+  const events = await collect(parseChatCompletionsSSE(streamFromString(fixture)));
+  assert.deepEqual(events[0], { type: "text", delta: "Need file." });
+  assert.deepEqual(events[1], {
+    type: "tool_call",
+    toolCall: { id: "call_2", name: "read", arguments: { path: "package.json" } }
+  });
+  assert.deepEqual(events[2], { type: "done", finishReason: "tool_calls" });
+});
+
+test("OpenAICompatProvider posts bearer-authenticated streaming chat completions", async () => {
+  const provider = new OpenAICompatProvider({
+    id: "deepseek",
+    baseURL: "https://compat.example/v1/",
+    apiKey: "sk-test",
+    defaultModel: "deepseek-v4-pro",
+    fetchImpl: async (url, init) => {
+      assert.equal(url, "https://compat.example/v1/chat/completions");
+      assert.equal((init?.headers as Record<string, string>).Authorization, "Bearer sk-test");
+      const body = JSON.parse(String(init?.body)) as Record<string, unknown>;
+      assert.equal(body.model, "deepseek-v4-pro");
+      assert.equal(body.stream, true);
+      return new Response(
+        streamFromString(
+          `data: ${JSON.stringify({ choices: [{ delta: { content: "ok" }, finish_reason: "stop" }] })}\n\n`
+        ),
+        { status: 200, headers: { "Content-Type": "text/event-stream" } }
+      );
+    }
+  });
+
+  const events = await collect(
+    provider.chat({ messages: [], tools: [], model: "deepseek-v4-pro", systemPrompt: "system" })
+  );
+  assert.deepEqual(events, [
+    { type: "text", delta: "ok" },
+    { type: "done", finishReason: "stop" }
+  ]);
 });
 
 test("OpenAICodexProvider retries one 401 with mocked token refresh and fake SSE", async () => {
