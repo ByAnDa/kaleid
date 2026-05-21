@@ -1,6 +1,6 @@
 export const DEFAULT_MODEL = "gpt-5.5";
 
-export type Command = "login" | "logout" | "repl" | "oneshot";
+export type Command = "repl" | "oneshot";
 
 export interface ParsedArgs {
   command: Command;
@@ -11,11 +11,15 @@ export interface ParsedArgs {
 }
 
 export const USAGE = `Usage:
-  kaleid login
-  kaleid logout
   kaleid
   kaleid "<prompt>"
   kaleid -p "<prompt>"
+
+Inside the REPL:
+  /login          Sign in
+  /logout         Sign out
+  /exit           Exit
+  /help           Show slash commands
 
 Options:
   --model <id>     Model to use (default: gpt-5.5)
@@ -85,7 +89,7 @@ export function parseArgs(argv: string[]): ParsedArgs {
 
   const explicitCommand = positionals[0];
   if (explicitCommand === "login" || explicitCommand === "logout") {
-    return { command: explicitCommand, model, help, version };
+    throw new Error(`Unknown command: ${explicitCommand}. Run "kaleid" and use /${explicitCommand} inside the REPL.`);
   }
 
   if (printPrompt !== undefined) {

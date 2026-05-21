@@ -5,8 +5,9 @@ import { join } from "node:path";
 import { PassThrough, Writable } from "node:stream";
 import test from "node:test";
 import { parseArgs } from "../src/cli/args.js";
+import { runCli } from "../src/cli/run.js";
 import { decodeAccountId, login, refresh, systemOpenBrowser } from "../src/auth/oauth.js";
-import { ensureValid, load, save, type Creds } from "../src/auth/token-store.js";
+import { ensureValid, load, NotLoggedInError, save, type Creds } from "../src/auth/token-store.js";
 import { buildRequestBody } from "../src/provider/responses-encode.js";
 import { parseResponsesSSE } from "../src/provider/responses-sse.js";
 import { OpenAICodexProvider } from "../src/provider/openai-codex.js";
@@ -18,6 +19,7 @@ import { executeBash } from "../src/tools/bash-executor.js";
 import { editTool } from "../src/tools/edit.js";
 import { readTool } from "../src/tools/read.js";
 import { writeTool } from "../src/tools/write.js";
+import { getSlashCommandCompletions, parseSlash, runSlashCommand } from "../src/tui/commands.js";
 
 function fakeJwt(accountId: string): string {
   const header = Buffer.from(JSON.stringify({ alg: "none" })).toString("base64url");
@@ -64,15 +66,133 @@ async function collect<T>(iterable: AsyncIterable<T>): Promise<T[]> {
 }
 
 test("parseArgs selects explicit commands, one-shot prompts, and model override", () => {
-  assert.deepEqual(parseArgs(["login"]), {
-    command: "login",
-    model: "gpt-5.5",
-    help: false,
-    version: false
-  });
   assert.equal(parseArgs(["--model", "gpt-x", "-p", "hello"]).model, "gpt-x");
   assert.deepEqual(parseArgs(["fix", "tests"]).command, "oneshot");
   assert.equal(parseArgs([]).command, "repl");
+  assert.throws(() => parseArgs(["login"]), /Unknown command: login/u);
+  assert.throws(() => parseArgs(["logout"]), /Unknown command: logout/u);
+});
+
+test("runCli starts the REPL without requiring login", async () => {
+  let ensured = false;
+  let replCwd = "";
+  const code = await runCli(
+    [],
+    {
+      packageVersion: "0.0.1",
+      ensureValid: async () => {
+        ensured = true;
+        throw new NotLoggedInError();
+      },
+      runOneShot: async () => {
+        throw new Error("one-shot should not run");
+      },
+      runRepl: (options) => {
+        replCwd = options.cwd;
+      }
+    },
+    { cwd: "/tmp/kaleid" }
+  );
+
+  assert.equal(code, 0);
+  assert.equal(ensured, false);
+  assert.equal(replCwd, "/tmp/kaleid");
+});
+
+test("runCli tells unauthenticated one-shot users to use REPL /login", async () => {
+  const stderrChunks: string[] = [];
+  let ranOneShot = false;
+
+  const code = await runCli(
+    ["fix", "tests"],
+    {
+      packageVersion: "0.0.1",
+      ensureValid: async () => {
+        throw new NotLoggedInError();
+      },
+      runOneShot: async () => {
+        ranOneShot = true;
+        return 0;
+      },
+      runRepl: () => undefined
+    },
+    {
+      stderr: {
+        write(chunk) {
+          stderrChunks.push(String(chunk));
+          return true;
+        }
+      }
+    }
+  );
+
+  assert.equal(code, 1);
+  assert.equal(ranOneShot, false);
+  assert.match(stderrChunks.join(""), /`kaleid`.*`\/login`/u);
+});
+
+test("slash command parser and dispatcher handle help, unknown, logout, and login", async () => {
+  assert.equal(parseSlash("write tests"), null);
+  assert.deepEqual(parseSlash("  /help now "), { command: "/help", args: ["now"] });
+  assert.deepEqual(getSlashCommandCompletions("/")?.map((command) => command.command), [
+    "/login",
+    "/logout",
+    "/exit",
+    "/help"
+  ]);
+  assert.deepEqual(getSlashCommandCompletions("/lo")?.map((command) => command.command), ["/login", "/logout"]);
+  assert.deepEqual(getSlashCommandCompletions("/nope"), []);
+  assert.equal(getSlashCommandCompletions("plain /"), null);
+  assert.equal(getSlashCommandCompletions("/login now"), null);
+
+  const help = await runSlashCommand({ command: "/help", args: [] });
+  assert.equal(help.action, "continue");
+  assert.match(help.messages[0] ?? "", /\/login/u);
+  assert.match(help.messages[0] ?? "", /\/logout/u);
+  assert.match(help.messages[0] ?? "", /\/exit/u);
+  assert.match(help.messages[0] ?? "", /\/help/u);
+
+  const unknown = await runSlashCommand({ command: "/wat", args: [] });
+  assert.deepEqual(unknown.messages, ["unknown command: /wat\nRun /help to see available slash commands."]);
+
+  let loggedOut = false;
+  const logoutResult = await runSlashCommand(
+    { command: "/logout", args: [] },
+    {
+      logout: async () => {
+        loggedOut = true;
+      }
+    }
+  );
+  assert.equal(loggedOut, true);
+  assert.match(logoutResult.messages[0] ?? "", /已登出/u);
+
+  const freshCreds: Creds = {
+    access: "access",
+    refresh: "refresh",
+    expires: Date.now() + 1000,
+    accountId: "acct_new"
+  };
+  let saved: Creds | null = null;
+  const loginResult = await runSlashCommand(
+    { command: "/login", args: [] },
+    {
+      load: async () => ({
+        access: "old",
+        refresh: "old_refresh",
+        expires: Date.now() + 1000,
+        accountId: "acct_old"
+      }),
+      login: async () => freshCreds,
+      save: async (creds) => {
+        saved = creds;
+      }
+    }
+  );
+
+  assert.equal(saved, freshCreds);
+  assert.match(loginResult.messages.join("\n"), /已登录为 acct_old/u);
+  assert.match(loginResult.messages.join("\n"), /登录成功: acct_new/u);
 });
 
 test("OAuth helpers decode account ids and refresh via mocked token endpoint", async () => {

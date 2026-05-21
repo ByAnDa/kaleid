@@ -12,7 +12,7 @@ export interface Creds {
 
 export class NotLoggedInError extends Error {
   constructor() {
-    super("Not logged in. Run: kaleid login");
+    super("Not logged in. Run `kaleid` and use /login");
     this.name = "NotLoggedInError";
   }
 }

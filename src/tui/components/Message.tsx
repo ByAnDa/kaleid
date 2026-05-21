@@ -9,7 +9,8 @@ export function Message({ msg }: { msg: Msg }): React.ReactElement {
   }
 
   const label = msg.role === "user" ? "you" : msg.role;
-  const color = msg.role === "user" ? "blue" : msg.role === "assistant" ? "cyan" : "red";
+  const color =
+    msg.role === "user" ? "blue" : msg.role === "assistant" ? "cyan" : msg.role === "system" ? "green" : "red";
 
   return (
     <Box flexDirection="column" marginBottom={1}>
