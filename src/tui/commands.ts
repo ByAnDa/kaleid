@@ -40,6 +40,8 @@ export const SLASH_COMMANDS: SlashCommandDefinition[] = [
   { command: "/logout", description: "Sign out and remove kaleid credentials" },
   { command: "/model", description: "Select the current model" },
   { command: "/reasoning", description: "Select reasoning effort" },
+  { command: "/compact", description: "Compact conversation context" },
+  { command: "/resume", description: "Resume a saved session" },
   { command: "/exit", description: "Exit kaleid" },
   { command: "/help", description: "Show available slash commands" }
 ];
@@ -102,7 +104,7 @@ export async function runSlashCommand(
     };
   }
 
-  if (parsed.command === "/model" || parsed.command === "/reasoning") {
+  if (parsed.command === "/model" || parsed.command === "/reasoning" || parsed.command === "/compact" || parsed.command === "/resume") {
     return {
       action: "continue",
       messages: [`${parsed.command} is available in the interactive TUI.`]

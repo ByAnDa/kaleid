@@ -2,7 +2,9 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { Box, useApp, useInput } from "ink";
 import { saveApiKey, type ApiKeyProviderId } from "../auth/config-store.js";
 import type { runTurn as runTurnFn } from "../loop/agent-loop.js";
-import type { Session } from "../loop/session.js";
+import { buildSystemPrompt } from "../loop/system-prompt.js";
+import { createSession, type Session, type TokenState } from "../loop/session.js";
+import { listSessions, loadSessionData, type SessionSummary } from "../loop/session-store.js";
 import {
   DEFAULT_REASONING_EFFORT,
   REASONING_LEVELS,
@@ -39,6 +41,7 @@ export interface AppProps {
   resolveProvider?: (model: string, models: AvailableModel[]) => Promise<LLMProvider>;
   tools: Tool[];
   runTurn: typeof runTurnFn;
+  openResumeSelectorOnStart?: boolean;
 }
 
 function summarize(text: string): string {
@@ -49,7 +52,36 @@ function nextId(): string {
   return crypto.randomUUID();
 }
 
-export type SelectorKind = "model" | "reasoning" | "login";
+function messagesToHistory(messages: Session["messages"]): Msg[] {
+  return messages
+    .filter((message) => message.content.length > 0 || message.role === "tool")
+    .map((message) => ({
+      id: nextId(),
+      role: message.role === "tool" ? "tool" : message.role,
+      text: message.content,
+      ...(message.role === "tool"
+        ? {
+            tool: {
+              name: "tool",
+              args: message.toolCallId ? { toolCallId: message.toolCallId } : {},
+              resultSummary: summarize(message.content),
+              isError: false
+            }
+          }
+        : {})
+    }));
+}
+
+function resumeToOption(session: SessionSummary): OptionSelectorItem {
+  const model = session.model ? ` · ${session.model}` : "";
+  return {
+    id: session.id,
+    label: `${session.title}${model}`,
+    current: false
+  };
+}
+
+export type SelectorKind = "model" | "reasoning" | "login" | "resume";
 export type SelectorFlow = "standalone" | "modelEffortChain";
 
 export interface SelectorTransitionInput {
@@ -170,7 +202,9 @@ export function cancelSelectorTransition(input: SelectorCancelInput): SelectorTr
         ? "已取消模型选择"
         : input.activeSelector === "login"
           ? "已取消登录"
-          : "已取消推理强度选择"
+          : input.activeSelector === "resume"
+            ? "已取消恢复会话"
+            : "已取消推理强度选择"
   };
 }
 
@@ -201,14 +235,19 @@ export function App({
   loadAvailableModels = getAuthenticatedModels,
   resolveProvider = createProviderForModel,
   tools,
-  runTurn
+  runTurn,
+  openResumeSelectorOnStart = false
 }: AppProps): React.ReactElement {
   const { exit } = useApp();
   const terminal = useTerminalDimensions();
-  const [currentModel, setCurrentModel] = useState(model);
+  const [currentSession, setCurrentSession] = useState(session);
+  const [currentModel, setCurrentModel] = useState(session.metadata.model ?? model);
   const [availableModels, setAvailableModels] = useState<AvailableModel[]>([]);
-  const [reasoningEffort, setReasoningEffort] = useState<ReasoningEffort>(DEFAULT_REASONING_EFFORT);
-  const [history, setHistory] = useState<Msg[]>([]);
+  const [reasoningEffort, setReasoningEffort] = useState<ReasoningEffort>(
+    session.metadata.reasoningEffort ?? DEFAULT_REASONING_EFFORT
+  );
+  const [history, setHistory] = useState<Msg[]>(() => messagesToHistory(session.messages));
+  const [tokenState, setTokenState] = useState<TokenState>(() => session.getTokenState(session.metadata.model ?? model));
   const [streaming, setStreaming] = useState<string | null>(null);
   const [status, setStatus] = useState<string | null>(null);
   const [input, setInput] = useState("");
@@ -218,6 +257,7 @@ export function App({
   const [activeSelector, setActiveSelector] = useState<SelectorKind | null>(null);
   const [selectorFlow, setSelectorFlow] = useState<SelectorFlow>("standalone");
   const [selectorIndex, setSelectorIndex] = useState(0);
+  const [resumeOptions, setResumeOptions] = useState<OptionSelectorItem[]>([]);
   const [busy, setBusy] = useState(false);
   const [manualCodePrompt, setManualCodePrompt] = useState<string | null>(null);
   const abortRef = useRef<AbortController | null>(null);
@@ -243,7 +283,15 @@ export function App({
     [reasoningEffort]
   );
   const selectorOptions =
-    activeSelector === "model" ? modelOptions : activeSelector === "reasoning" ? reasoningOptions : activeSelector === "login" ? LOGIN_OPTIONS : [];
+    activeSelector === "model"
+      ? modelOptions
+      : activeSelector === "reasoning"
+        ? reasoningOptions
+        : activeSelector === "login"
+          ? LOGIN_OPTIONS
+          : activeSelector === "resume"
+            ? resumeOptions
+            : [];
   const selectedSelectorIndex =
     selectorOptions.length === 0 ? -1 : Math.min(selectorIndex, selectorOptions.length - 1);
   const selectorVisible = activeSelector !== null;
@@ -295,7 +343,9 @@ export function App({
           ? buildModelOptions(currentModel, modelsOverride ?? availableModels)
           : kind === "reasoning"
             ? reasoningOptions
-            : LOGIN_OPTIONS;
+            : kind === "resume"
+              ? resumeOptions
+              : LOGIN_OPTIONS;
       setInput("");
       setSlashMenuOpen(false);
       setSlashMenuIndex(0);
@@ -303,7 +353,7 @@ export function App({
       setSelectorFlow(flow);
       setSelectorIndex(getCurrentIndex(options));
     },
-    [availableModels, currentModel, reasoningOptions]
+    [availableModels, currentModel, reasoningOptions, resumeOptions]
   );
 
   const closeSelector = useCallback(() => {
@@ -376,6 +426,71 @@ export function App({
     [closeSelector, commit, loadAvailableModels, startManualCodeInput, startManualInput]
   );
 
+  const restoreSession = useCallback(
+    async (sessionId: string) => {
+      closeSelector();
+      setBusy(true);
+      setStatus("resuming session...");
+
+      try {
+        const data = await loadSessionData(sessionId);
+        const restored = createSession({
+          id: data.id,
+          messages: data.messages,
+          metadata: data.metadata,
+          persisted: true,
+          model
+        });
+        const restoredModel = data.metadata.model ?? model;
+        const restoredEffort = data.metadata.reasoningEffort ?? DEFAULT_REASONING_EFFORT;
+        setCurrentSession(restored);
+        setCurrentModel(restoredModel);
+        setReasoningEffort(restoredEffort);
+        setHistory(messagesToHistory(data.messages));
+        setTokenState(restored.refreshTokenEstimate(restoredModel, buildSystemPrompt(cwd)));
+        commit({ id: nextId(), role: "system", text: `已恢复会话: ${data.metadata.title ?? data.id}` });
+      } catch (error) {
+        commit({ id: nextId(), role: "error", text: error instanceof Error ? error.message : String(error) });
+      } finally {
+        setBusy(false);
+        setStatus(null);
+      }
+    },
+    [closeSelector, commit, cwd, model]
+  );
+
+  const openResumeSelector = useCallback(async () => {
+    setBusy(true);
+    setStatus("loading sessions...");
+    try {
+      const sessions = await listSessions();
+      if (sessions.length === 0) {
+        commit({ id: nextId(), role: "system", text: "没有可恢复的会话。" });
+        return;
+      }
+
+      const options = sessions.map(resumeToOption);
+      setResumeOptions(options);
+      setInput("");
+      setSlashMenuOpen(false);
+      setSlashMenuIndex(0);
+      setActiveSelector("resume");
+      setSelectorFlow("standalone");
+      setSelectorIndex(0);
+    } catch (error) {
+      commit({ id: nextId(), role: "error", text: error instanceof Error ? error.message : String(error) });
+    } finally {
+      setBusy(false);
+      setStatus(null);
+    }
+  }, [commit]);
+
+  useEffect(() => {
+    if (openResumeSelectorOnStart) {
+      void openResumeSelector();
+    }
+  }, [openResumeSelector, openResumeSelectorOnStart]);
+
   const applySelector = useCallback(() => {
     const selected = selectorOptions[selectedSelectorIndex];
     if (!activeSelector || !selected) {
@@ -385,6 +500,11 @@ export function App({
 
     if (activeSelector === "login") {
       void runLoginFlow(selected.id as ProviderId);
+      return;
+    }
+
+    if (activeSelector === "resume") {
+      void restoreSession(selected.id);
       return;
     }
 
@@ -399,6 +519,8 @@ export function App({
 
     setCurrentModel(transition.currentModel);
     setReasoningEffort(transition.reasoningEffort);
+    currentSession.setRunState(transition.currentModel, transition.reasoningEffort);
+    setTokenState(currentSession.getTokenState(transition.currentModel));
     if (transition.message) {
       commit({ id: nextId(), role: "system", text: transition.message });
     }
@@ -415,11 +537,13 @@ export function App({
     activeSelector,
     closeSelector,
     commit,
+    currentSession,
     currentModel,
     modelOptions,
     reasoningEffort,
     reasoningOptions,
     runLoginFlow,
+    restoreSession,
     selectedSelectorIndex,
     selectorFlow,
     selectorOptions
@@ -560,6 +684,48 @@ export function App({
           return;
         }
 
+        if (slash.command === "/resume") {
+          setSlashMenuOpen(false);
+          await openResumeSelector();
+          return;
+        }
+
+        if (slash.command === "/compact") {
+          setSlashMenuOpen(false);
+          setBusy(true);
+          setStatus("compacting...");
+          try {
+            const turnModels = availableModels.length > 0 ? availableModels : await loadAvailableModels().catch(() => []);
+            if (turnModels.length > 0) {
+              setAvailableModels(turnModels);
+            }
+            const compactProvider = provider ?? (await resolveProvider(currentModel, turnModels));
+            const compactProviderId = getProviderForModel(currentModel, turnModels);
+            const result = await currentSession.maybeCompact({
+              provider: compactProvider,
+              model: currentModel,
+              reasoningEffort: providerSupportsReasoningEffort(compactProviderId) ? reasoningEffort : undefined,
+              systemPrompt: buildSystemPrompt(cwd),
+              force: true
+            });
+            await currentSession.persist();
+            setTokenState(currentSession.getTokenState(currentModel));
+            commit({
+              id: nextId(),
+              role: "system",
+              text: result.compacted
+                ? `已压缩上下文（节省 ~${result.savedTokens} token）`
+                : `未压缩上下文：${result.reason ?? "没有可压缩内容"}`
+            });
+          } catch (error) {
+            commit({ id: nextId(), role: "error", text: error instanceof Error ? error.message : String(error) });
+          } finally {
+            setBusy(false);
+            setStatus(null);
+          }
+          return;
+        }
+
         setSlashMenuOpen(false);
         setBusy(true);
         setStatus(`running ${slash.command}...`);
@@ -609,7 +775,7 @@ export function App({
         }
         const turnProvider = provider ?? (await resolveProvider(currentModel, turnModels));
         const turnProviderId = getProviderForModel(currentModel, turnModels);
-        for await (const event of runTurn(session, prompt, {
+        for await (const event of runTurn(currentSession, prompt, {
           provider: turnProvider,
           tools,
           model: currentModel,
@@ -636,6 +802,14 @@ export function App({
               }
             });
             setStatus("thinking...");
+          } else if (event.type === "token_update") {
+            setTokenState(event.state);
+          } else if (event.type === "compaction") {
+            commit({
+              id: nextId(),
+              role: "system",
+              text: `已压缩上下文（节省 ~${event.result.savedTokens} token）`
+            });
           } else if (event.type === "turn_done") {
             commitAssistant();
             setStatus(null);
@@ -656,6 +830,7 @@ export function App({
     [
       busy,
       commit,
+      currentSession,
       currentModel,
       currentProvider,
       cwd,
@@ -664,11 +839,11 @@ export function App({
       loadAvailableModels,
       manualCodePrompt,
       openSelector,
+      openResumeSelector,
       provider,
       reasoningEffort,
       resolveProvider,
       runTurn,
-      session,
       tools,
       updateInput
     ]
@@ -709,7 +884,9 @@ export function App({
               ? "Select model"
               : activeSelector === "login"
                 ? "Select provider"
-                : "Select reasoning effort"
+                : activeSelector === "resume"
+                  ? "Resume session"
+                  : "Select reasoning effort"
           }
           width={terminal.columns}
         />
@@ -727,6 +904,7 @@ export function App({
         slashCommandCount={slashCandidates.length}
         slashMenuVisible={slashMenuVisible}
         status={status}
+        tokenState={tokenState}
         width={terminal.columns}
       />
     </Box>

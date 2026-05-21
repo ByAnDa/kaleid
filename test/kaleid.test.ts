@@ -22,6 +22,7 @@ import {
   DEEPSEEK_FALLBACK_MODELS,
   DEFAULT_MODEL,
   DEFAULT_REASONING_EFFORT,
+  getModelContextWindow,
   KIMI_MODELS,
   REASONING_LEVELS,
   getProviderForModel,
@@ -36,6 +37,8 @@ import {
 import type { ChatParams, LLMProvider, StreamEvent } from "../src/provider/types.js";
 import { runTurn } from "../src/loop/agent-loop.js";
 import { createSession } from "../src/loop/session.js";
+import { COMPACTION_SUMMARY_PREFIX } from "../src/loop/compaction.js";
+import { listSessions, loadSessionData } from "../src/loop/session-store.js";
 import { bashTool } from "../src/tools/bash.js";
 import { executeBash } from "../src/tools/bash-executor.js";
 import { editTool } from "../src/tools/edit.js";
@@ -48,7 +51,7 @@ import {
   getVisibleConversationEntries
 } from "../src/tui/components/Conversation.js";
 import { formatHeaderState, truncateHeaderState } from "../src/tui/components/Header.js";
-import { getInputBarHeight } from "../src/tui/components/InputBar.js";
+import { formatTokenStatus, getInputBarHeight } from "../src/tui/components/InputBar.js";
 import { getMessageStyle } from "../src/tui/components/Message.js";
 import { formatOptionSelectorLine, getOptionSelectorHeight } from "../src/tui/components/OptionSelector.js";
 import { formatToolCallLine } from "../src/tui/components/ToolCall.js";
@@ -117,6 +120,22 @@ async function withTempConfigFile<T>(fn: (file: string) => Promise<T>): Promise<
   }
 }
 
+async function withTempSessions<T>(fn: (dir: string) => Promise<T>): Promise<T> {
+  const old = process.env.KALEID_SESSIONS_DIR;
+  const dir = await mkdtemp(join(tmpdir(), "kaleid-sessions-"));
+  process.env.KALEID_SESSIONS_DIR = dir;
+  try {
+    return await fn(dir);
+  } finally {
+    if (old === undefined) {
+      delete process.env.KALEID_SESSIONS_DIR;
+    } else {
+      process.env.KALEID_SESSIONS_DIR = old;
+    }
+    await rm(dir, { recursive: true, force: true });
+  }
+}
+
 function streamFromString(value: string): ReadableStream<Uint8Array> {
   return new ReadableStream<Uint8Array>({
     start(controller) {
@@ -140,6 +159,9 @@ test("parseArgs selects explicit commands, one-shot prompts, and model override"
   assert.equal(parseArgs(["--model", "gpt-x", "-p", "hello"]).model, "gpt-x");
   assert.deepEqual(parseArgs(["fix", "tests"]).command, "oneshot");
   assert.equal(parseArgs([]).command, "repl");
+  assert.deepEqual(parseArgs(["--continue"]).resume, { kind: "latest" });
+  assert.deepEqual(parseArgs(["--resume"]).resume, { kind: "select" });
+  assert.deepEqual(parseArgs(["--resume", "session_1"]).resume, { kind: "id", id: "session_1" });
   assert.throws(() => parseArgs(["login"]), /Unknown command: login/u);
   assert.throws(() => parseArgs(["logout"]), /Unknown command: logout/u);
 });
@@ -165,6 +187,8 @@ test("model and reasoning constants expose selectable defaults", () => {
   assert.ok(AVAILABLE_MODELS.every((model) => model.provider === "openai-codex"));
   assert.equal(AVAILABLE_MODELS.some((model) => model.id === "gpt-5.5-pro"), false);
   assert.equal(AVAILABLE_MODELS.some((model) => model.id === "gpt-5.2-codex"), false);
+  assert.equal(getModelContextWindow(DEFAULT_MODEL), 272000);
+  assert.equal(getModelContextWindow("unknown-model"), 128000);
   assert.equal(getProviderForModel("deepseek-reasoner"), "deepseek");
   assert.equal(getProviderForModel("kimi-for-coding"), "kimi");
   assert.deepEqual(REASONING_LEVELS, ["minimal", "low", "medium", "high", "xhigh"]);
@@ -239,6 +263,8 @@ test("slash command parser and dispatcher handle help, unknown, logout, and logi
     "/logout",
     "/model",
     "/reasoning",
+    "/compact",
+    "/resume",
     "/exit",
     "/help"
   ]);
@@ -254,6 +280,8 @@ test("slash command parser and dispatcher handle help, unknown, logout, and logi
   assert.match(help.messages[0] ?? "", /\/logout/u);
   assert.match(help.messages[0] ?? "", /\/model/u);
   assert.match(help.messages[0] ?? "", /\/reasoning/u);
+  assert.match(help.messages[0] ?? "", /\/compact/u);
+  assert.match(help.messages[0] ?? "", /\/resume/u);
   assert.match(help.messages[0] ?? "", /\/exit/u);
   assert.match(help.messages[0] ?? "", /\/help/u);
 
@@ -543,11 +571,11 @@ test("TUI selector Esc keeps chained model and standalone reasoning only changes
 test("TUI input footer reserves rows for status, slash menu, and OAuth paste mode", () => {
   assert.equal(
     getInputBarHeight({ manualCodePrompt: null, slashCommandCount: 4, slashMenuVisible: false, status: null }),
-    3
+    4
   );
   assert.equal(
     getInputBarHeight({ manualCodePrompt: null, slashCommandCount: 4, slashMenuVisible: true, status: null }),
-    7
+    8
   );
   assert.equal(
     getInputBarHeight({
@@ -556,7 +584,21 @@ test("TUI input footer reserves rows for status, slash menu, and OAuth paste mod
       slashMenuVisible: true,
       status: "waiting"
     }),
-    6
+    7
+  );
+  assert.equal(
+    formatTokenStatus({
+      usedTokens: 12345,
+      contextWindow: 272000,
+      percent: 4.538,
+      warning: false,
+      source: "estimate",
+      model: "gpt-5.5",
+      reserveTokens: 16384,
+      keepRecentTokens: 20000,
+      updatedAt: "now"
+    }),
+    "ctx 12.3K / 272K · 4.5%"
   );
 });
 
@@ -1039,47 +1081,95 @@ test("executeBash cancels timed-out process and truncates large output", async (
 });
 
 test("runTurn executes requested tools, feeds results back, and finishes", async () => {
-  const dir = await mkdtemp(join(tmpdir(), "kaleid-loop-"));
-  try {
-    let calls = 0;
-    const seenRequests: Array<Pick<ChatParams, "model" | "reasoningEffort">> = [];
+  await withTempSessions(async () => {
+    const dir = await mkdtemp(join(tmpdir(), "kaleid-loop-"));
+    try {
+      let calls = 0;
+      const seenRequests: Array<Pick<ChatParams, "model" | "reasoningEffort">> = [];
+      const provider: LLMProvider = {
+        id: "fake",
+        async *chat(params: ChatParams): AsyncIterable<StreamEvent> {
+          seenRequests.push({ model: params.model, reasoningEffort: params.reasoningEffort });
+          calls += 1;
+          if (calls === 1) {
+            yield {
+              type: "tool_call",
+              toolCall: { id: "call_1", name: "write", arguments: { path: "out.txt", content: "ok" } }
+            };
+            yield { type: "done", finishReason: "tool_calls" };
+            return;
+          }
+          yield { type: "text", delta: "done" };
+          yield { type: "usage", usage: { inputTokens: 40, outputTokens: 5, totalTokens: 45 } };
+          yield { type: "done", finishReason: "stop" };
+        }
+      };
+
+      const session = createSession();
+      const events = await collect(
+        runTurn(session, "create a file", {
+          provider,
+          tools: [writeTool],
+          model: "fake-model",
+          reasoningEffort: "high",
+          cwd: dir
+        })
+      );
+
+      assert.equal(await readFile(join(dir, "out.txt"), "utf8"), "ok");
+      assert.deepEqual(seenRequests, [
+        { model: "fake-model", reasoningEffort: "high" },
+        { model: "fake-model", reasoningEffort: "high" }
+      ]);
+      assert.deepEqual(
+        events.map((event) => event.type),
+        ["token_update", "token_update", "tool_start", "tool_end", "token_update", "token_update", "assistant_text", "token_update", "turn_done"]
+      );
+      assert.deepEqual(session.messages.map((message) => message.role), ["user", "assistant", "tool", "assistant"]);
+      assert.equal(session.getTokenState("fake-model").source, "provider");
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+});
+
+test("session persistence writes jsonl and resume rebuilds compacted messages", async () => {
+  await withTempSessions(async () => {
+    const session = createSession({ id: "session_test", model: "gpt-5.5" });
+    session.setRunState("gpt-5.5", "high");
+    session.append({ role: "user", content: "first task" });
+    session.append({ role: "assistant", content: "first answer" });
+    await session.persist();
+
+    const summaries = await listSessions();
+    assert.equal(summaries[0]?.id, "session_test");
+    assert.equal(summaries[0]?.title, "first task");
+
+    const restored = await loadSessionData("session_test");
+    assert.equal(restored.metadata.model, "gpt-5.5");
+    assert.equal(restored.metadata.reasoningEffort, "high");
+    assert.deepEqual(restored.messages.map((message) => message.content), ["first task", "first answer"]);
+
+    const compacted = createSession({ id: "session_test", messages: restored.messages, metadata: restored.metadata, persisted: true });
     const provider: LLMProvider = {
       id: "fake",
-      async *chat(params: ChatParams): AsyncIterable<StreamEvent> {
-        seenRequests.push({ model: params.model, reasoningEffort: params.reasoningEffort });
-        calls += 1;
-        if (calls === 1) {
-          yield {
-            type: "tool_call",
-            toolCall: { id: "call_1", name: "write", arguments: { path: "out.txt", content: "ok" } }
-          };
-          yield { type: "done", finishReason: "tool_calls" };
-          return;
-        }
-        yield { type: "text", delta: "done" };
-        yield { type: "done", finishReason: "stop" };
+      async *chat(): AsyncIterable<StreamEvent> {
+        yield { type: "text", delta: "summary" };
       }
     };
+    compacted.append({ role: "user", content: "second task" });
+    const result = await compacted.maybeCompact({
+      provider,
+      model: "gpt-5.5",
+      systemPrompt: "system",
+      force: true
+    });
+    assert.equal(result.compacted, true);
+    await compacted.persist();
 
-    const session = createSession();
-    const events = await collect(
-      runTurn(session, "create a file", {
-        provider,
-        tools: [writeTool],
-        model: "fake-model",
-        reasoningEffort: "high",
-        cwd: dir
-      })
-    );
-
-    assert.equal(await readFile(join(dir, "out.txt"), "utf8"), "ok");
-    assert.deepEqual(seenRequests, [
-      { model: "fake-model", reasoningEffort: "high" },
-      { model: "fake-model", reasoningEffort: "high" }
-    ]);
-    assert.deepEqual(events.map((event) => event.type), ["tool_start", "tool_end", "assistant_text", "turn_done"]);
-    assert.deepEqual(session.messages.map((message) => message.role), ["user", "assistant", "tool", "assistant"]);
-  } finally {
-    await rm(dir, { recursive: true, force: true });
-  }
+    const resumed = await loadSessionData("session_test");
+    assert.equal(resumed.messages[0]?.role, "system");
+    assert.match(resumed.messages[0]?.content ?? "", new RegExp(COMPACTION_SUMMARY_PREFIX, "u"));
+    assert.equal(resumed.messages.at(-1)?.content, "second task");
+  });
 });

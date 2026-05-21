@@ -36,10 +36,12 @@ export async function* runTurn(
   userInput: string,
   opts: RunOptions
 ): AsyncIterable<AgentEvent> {
+  const systemPrompt = buildSystemPrompt(opts.cwd);
+  session.setRunState(opts.model, opts.reasoningEffort);
   session.append({ role: "user", content: userInput });
 
   try {
-    await session.maybeCompact();
+    await session.persist();
 
     for (let step = 0; step < STEP_LIMIT; step += 1) {
       if (opts.signal?.aborted) {
@@ -47,15 +49,31 @@ export async function* runTurn(
         return;
       }
 
+      const compaction = await session.maybeCompact({
+        provider: opts.provider,
+        model: opts.model,
+        reasoningEffort: opts.reasoningEffort,
+        systemPrompt,
+        signal: opts.signal
+      });
+      if (compaction.compacted) {
+        await session.persist();
+        yield { type: "compaction", result: compaction };
+        yield { type: "token_update", state: session.getTokenState(opts.model) };
+      } else {
+        yield { type: "token_update", state: session.refreshTokenEstimate(opts.model, systemPrompt) };
+      }
+
       let assistantText = "";
       const toolCalls: ToolCall[] = [];
+      let sawUsage = false;
 
       const stream = opts.provider.chat({
         messages: session.messages,
         tools: toToolSchemas(opts.tools),
         model: opts.model,
         reasoningEffort: opts.reasoningEffort,
-        systemPrompt: buildSystemPrompt(opts.cwd),
+        systemPrompt,
         signal: opts.signal,
         sessionId: session.id
       });
@@ -66,6 +84,9 @@ export async function* runTurn(
           yield { type: "assistant_text", delta: event.delta };
         } else if (event.type === "tool_call") {
           toolCalls.push(event.toolCall);
+        } else if (event.type === "usage") {
+          sawUsage = true;
+          yield { type: "token_update", state: session.updateTokenUsage(opts.model, event.usage, systemPrompt) };
         }
       }
 
@@ -75,6 +96,9 @@ export async function* runTurn(
         ...(toolCalls.length > 0 ? { toolCalls } : {})
       };
       session.append(assistantMessage);
+      if (!sawUsage) {
+        yield { type: "token_update", state: session.refreshTokenEstimate(opts.model, systemPrompt) };
+      }
 
       if (toolCalls.length === 0) {
         await session.persist();
@@ -93,6 +117,7 @@ export async function* runTurn(
           toolCallId: call.id,
           content: result.output
         });
+        yield { type: "token_update", state: session.refreshTokenEstimate(opts.model, systemPrompt) };
       }
     }
 

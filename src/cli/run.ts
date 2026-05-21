@@ -17,7 +17,7 @@ export interface CliDeps {
   ensureCanUseModel?: (model: string) => Promise<void>;
   packageVersion: string;
   runOneShot?: typeof defaultRunOneShot;
-  runRepl?: typeof defaultRunRepl;
+  runRepl?: (options: Parameters<typeof defaultRunRepl>[0]) => void | Promise<void>;
 }
 
 export async function runCli(argv: string[], deps: CliDeps, runtime: CliRuntime = {}): Promise<number> {
@@ -67,12 +67,18 @@ export async function runCli(argv: string[], deps: CliDeps, runtime: CliRuntime 
     return runOneShot({
       prompt: args.prompt ?? "",
       model: args.model,
+      resume: args.resume,
       cwd,
       stdout,
       stderr
     });
   }
 
-  runRepl({ model: args.model, cwd });
+  try {
+    await runRepl({ model: args.model, cwd, resume: args.resume });
+  } catch (error) {
+    stderr.write(`Error: ${error instanceof Error ? error.message : String(error)}\n`);
+    return 1;
+  }
   return 0;
 }

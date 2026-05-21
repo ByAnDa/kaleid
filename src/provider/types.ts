@@ -19,9 +19,16 @@ export interface ToolSchema {
   parameters: object;
 }
 
+export interface TokenUsage {
+  inputTokens?: number;
+  outputTokens?: number;
+  totalTokens?: number;
+}
+
 export type StreamEvent =
   | { type: "text"; delta: string }
   | { type: "tool_call"; toolCall: ToolCall }
+  | { type: "usage"; usage: TokenUsage }
   | { type: "done"; finishReason: "stop" | "tool_calls" | "length" };
 
 export interface ChatParams {
