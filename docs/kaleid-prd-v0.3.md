@@ -27,17 +27,14 @@ Reviewer: ByAnDa
 
 ---
 
-## ⭐ 重点借鉴项目（ByAnDa msg=bedbf288 指定，长期记忆）
+## ⭐ 重点借鉴项目（架构/经验参考）
 
-kaleid 自研以这两个项目为主要架构/经验参考（仅借鉴设计模式，不依赖/复制代码）：
+kaleid 为 clean-room 自研，**仅借鉴设计模式，不依赖/复制任何第三方代码**：
 
-1. **pi** — https://github.com/earendil-works/pi
+1. **pi** — https://github.com/earendil-works/pi （MIT 开源）
    - 中量级开源 agent harness。4 包 monorepo：pi-ai(多 provider + OAuth) / pi-agent-core(loop+工具+状态) / pi-coding-agent(read/bash/edit/write+session+模式) / pi-tui。
    - **OpenAI Codex OAuth 实现参考**：`pi-ai/utils/oauth/openai-codex.ts` + `pkce.ts` + `providers/openai-codex-responses.ts`。
-   - 详见 `kaleid V1 vs pi 详细对比.md`。
-2. **Claude Code（泄露源码镜像）** — https://github.com/yasasbanukaofficial/claude-code
-   - 满配生产级终态参考。自研 Ink 渲染器(防闪) / Tool 接口 / BashTool 安全分层 / compact+autoDream 记忆。
-   - 详见 `kaleid V1 vs Claude Code 详细对比.md`。
+2. Claude Code（Anthropic 的终端编码 agent）—— 仅作**架构模式**层面的设计灵感（Tool 接口分层 / bash 安全分层 / Ink 渲染防闪），不引用其代码或来源。
 
 借鉴要点（已并入本 PRD）：统一 Tool 接口趁早定 / bash 单 chokepoint / TUI Static 防闪 / loop 预留 compaction+session 接口 / OpenAI Codex OAuth 流程。
 
