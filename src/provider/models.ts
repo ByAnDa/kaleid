@@ -8,6 +8,10 @@ export type ProviderId = "openai-codex" | "deepseek" | "kimi";
 
 export const DEFAULT_MODEL = "gpt-5.5";
 export const DEFAULT_PROVIDER: ProviderId = "openai-codex";
+export const DEFAULT_CONTEXT_WINDOW_TOKENS = 128000;
+export const DEFAULT_RESERVE_TOKENS = 16384;
+export const DEFAULT_KEEP_RECENT_TOKENS = 20000;
+export const TOKEN_WARNING_PERCENT = 85;
 
 export const PROVIDER_LABELS: Record<ProviderId, string> = {
   "openai-codex": "[openai-codex]",
@@ -41,6 +45,40 @@ export const KIMI_MODELS: AvailableModel[] = [
 ];
 
 export const AVAILABLE_MODELS: AvailableModel[] = [...OPENAI_CODEX_MODELS];
+
+export interface ModelMemoryConfig {
+  contextWindow: number;
+  reserveTokens: number;
+  keepRecentTokens: number;
+  warningPercent: number;
+}
+
+export const MODEL_CONTEXT_WINDOWS: Record<string, number> = {
+  "o4-mini-deep-research": 200000,
+  "gpt-5.2": 272000,
+  "gpt-5.3-codex": 272000,
+  "gpt-5.3-codex-spark": 272000,
+  "gpt-5.4": 272000,
+  "gpt-5.4-mini": 272000,
+  "gpt-5.5": 272000,
+  "deepseek-v4-pro": 128000,
+  "deepseek-v4-flash": 128000,
+  "deepseek-reasoner": 128000,
+  "kimi-for-coding": 128000
+};
+
+export function getModelContextWindow(modelId: string): number {
+  return MODEL_CONTEXT_WINDOWS[modelId] ?? DEFAULT_CONTEXT_WINDOW_TOKENS;
+}
+
+export function getModelMemoryConfig(modelId: string): ModelMemoryConfig {
+  return {
+    contextWindow: getModelContextWindow(modelId),
+    reserveTokens: DEFAULT_RESERVE_TOKENS,
+    keepRecentTokens: DEFAULT_KEEP_RECENT_TOKENS,
+    warningPercent: TOKEN_WARNING_PERCENT
+  };
+}
 
 export const REASONING_LEVELS = ["minimal", "low", "medium", "high", "xhigh"] as const;
 export type ReasoningEffort = (typeof REASONING_LEVELS)[number];

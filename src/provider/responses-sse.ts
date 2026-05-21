@@ -1,4 +1,4 @@
-import type { StreamEvent, ToolCall } from "./types.js";
+import type { StreamEvent, TokenUsage, ToolCall } from "./types.js";
 
 interface PendingToolCall {
   id: string;
@@ -11,6 +11,27 @@ function parseFinishReason(value: unknown, usedTool: boolean): "stop" | "tool_ca
     return "length";
   }
   return usedTool ? "tool_calls" : "stop";
+}
+
+function numberField(value: unknown): number | undefined {
+  return typeof value === "number" && Number.isFinite(value) ? value : undefined;
+}
+
+function parseUsage(value: unknown): TokenUsage | null {
+  const usage = value as Record<string, unknown> | undefined;
+  if (!usage || typeof usage !== "object") {
+    return null;
+  }
+
+  const parsed: TokenUsage = {
+    inputTokens: numberField(usage.input_tokens ?? usage.prompt_tokens),
+    outputTokens: numberField(usage.output_tokens ?? usage.completion_tokens),
+    totalTokens: numberField(usage.total_tokens)
+  };
+
+  return parsed.inputTokens !== undefined || parsed.outputTokens !== undefined || parsed.totalTokens !== undefined
+    ? parsed
+    : null;
 }
 
 function eventKey(event: Record<string, unknown>): string | undefined {
@@ -118,7 +139,11 @@ function processDataLine(
   if (type === "response.completed" || type === "response.done") {
     const response = event.response as Record<string, unknown> | undefined;
     const finishReason = parseFinishReason(response?.finish_reason ?? event.finish_reason, pending.size > 0);
-    return [{ type: "done", finishReason }];
+    const usage = parseUsage(response?.usage ?? event.usage);
+    return [
+      ...(usage ? ([{ type: "usage", usage }] satisfies StreamEvent[]) : []),
+      { type: "done", finishReason }
+    ];
   }
 
   return [];

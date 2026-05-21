@@ -1,4 +1,5 @@
 import { createSession } from "../loop/session.js";
+import { loadLatestSession, loadSessionData, type ResumeRequest } from "../loop/session-store.js";
 import { runTurn } from "../loop/agent-loop.js";
 import { createProviderForModel, getAuthenticatedModels } from "../provider/registry.js";
 import { tools } from "../tools/index.js";
@@ -6,6 +7,7 @@ import { tools } from "../tools/index.js";
 export interface OneShotOptions {
   prompt: string;
   model: string;
+  resume?: ResumeRequest;
   cwd: string;
   stdout?: Pick<NodeJS.WriteStream, "write">;
   stderr?: Pick<NodeJS.WriteStream, "write">;
@@ -19,14 +21,23 @@ function firstLine(text: string): string {
 export async function runOneShot(options: OneShotOptions): Promise<number> {
   const stdout = options.stdout ?? process.stdout;
   const stderr = options.stderr ?? process.stderr;
-  const session = createSession();
+  const resumed =
+    options.resume?.kind === "id"
+      ? await loadSessionData(options.resume.id)
+      : options.resume
+        ? await loadLatestSession()
+        : null;
+  const session = resumed
+    ? createSession({ id: resumed.id, messages: resumed.messages, metadata: resumed.metadata, persisted: true, model: options.model })
+    : createSession({ model: options.model });
+  const model = resumed?.metadata.model ?? options.model;
   const availableModels = await getAuthenticatedModels();
-  const provider = await createProviderForModel(options.model, availableModels);
+  const provider = await createProviderForModel(model, availableModels);
 
   for await (const event of runTurn(session, options.prompt, {
     provider,
     tools,
-    model: options.model,
+    model,
     cwd: options.cwd,
     signal: options.signal
   })) {

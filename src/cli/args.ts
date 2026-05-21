@@ -1,4 +1,5 @@
 import { DEFAULT_MODEL } from "../provider/models.js";
+import type { ResumeRequest } from "../loop/session-store.js";
 
 export { DEFAULT_MODEL };
 
@@ -8,12 +9,15 @@ export interface ParsedArgs {
   command: Command;
   prompt?: string;
   model: string;
+  resume?: ResumeRequest;
   help: boolean;
   version: boolean;
 }
 
 export const USAGE = `Usage:
   kaleid
+  kaleid --continue
+  kaleid --resume [id]
   kaleid "<prompt>"
   kaleid -p "<prompt>"
 
@@ -27,6 +31,8 @@ Inside the REPL:
 
 Options:
   --model <id>     Model to use (default: gpt-5.5)
+  --continue       Resume the most recent session
+  --resume [id]    Resume a saved session, or choose one in the REPL
   -p, --print      Run one-shot mode with the provided prompt
   -h, --help       Show this help
   -v, --version    Show the version`;
@@ -36,6 +42,7 @@ export function parseArgs(argv: string[]): ParsedArgs {
   let help = false;
   let version = false;
   let printPrompt: string | undefined;
+  let resume: ResumeRequest | undefined;
   const positionals: string[] = [];
 
   for (let i = 0; i < argv.length; i += 1) {
@@ -56,6 +63,31 @@ export function parseArgs(argv: string[]): ParsedArgs {
 
     if (arg === "-v" || arg === "--version") {
       version = true;
+      continue;
+    }
+
+    if (arg === "--continue") {
+      resume = { kind: "latest" };
+      continue;
+    }
+
+    if (arg === "--resume") {
+      const value = argv[i + 1];
+      if (value && !value.startsWith("-")) {
+        resume = { kind: "id", id: value };
+        i += 1;
+      } else {
+        resume = { kind: "select" };
+      }
+      continue;
+    }
+
+    if (arg.startsWith("--resume=")) {
+      const value = arg.slice("--resume=".length);
+      if (!value) {
+        throw new Error("--resume requires a non-empty id when using --resume=<id>");
+      }
+      resume = { kind: "id", id: value };
       continue;
     }
 
@@ -97,7 +129,7 @@ export function parseArgs(argv: string[]): ParsedArgs {
   }
 
   if (printPrompt !== undefined) {
-    return { command: "oneshot", prompt: printPrompt, model, help, version };
+    return { command: "oneshot", prompt: printPrompt, model, resume, help, version };
   }
 
   if (positionals.length > 0) {
@@ -105,10 +137,11 @@ export function parseArgs(argv: string[]): ParsedArgs {
       command: "oneshot",
       prompt: positionals.join(" "),
       model,
+      resume,
       help,
       version
     };
   }
 
-  return { command: "repl", model, help, version };
+  return { command: "repl", model, resume, help, version };
 }

@@ -1,4 +1,4 @@
-import type { ChatMessage, ChatParams, LLMProvider, StreamEvent, ToolCall, ToolSchema } from "./types.js";
+import type { ChatMessage, ChatParams, LLMProvider, StreamEvent, TokenUsage, ToolCall, ToolSchema } from "./types.js";
 import type { ApiKeyProviderId } from "../auth/config-store.js";
 
 interface PendingToolCall {
@@ -116,6 +116,7 @@ export function buildChatCompletionBody(params: ChatParams): Record<string, unkn
     model: params.model,
     messages: encodeChatMessages(params.systemPrompt, params.messages),
     stream: true,
+    stream_options: { include_usage: true },
     ...(tools.length > 0
       ? {
           tools,
@@ -151,6 +152,27 @@ function pendingToToolCalls(pending: Map<string, PendingToolCall>): ToolCall[] {
   }));
 }
 
+function numberField(value: unknown): number | undefined {
+  return typeof value === "number" && Number.isFinite(value) ? value : undefined;
+}
+
+function parseUsage(value: unknown): TokenUsage | null {
+  const usage = value as Record<string, unknown> | undefined;
+  if (!usage || typeof usage !== "object") {
+    return null;
+  }
+
+  const parsed: TokenUsage = {
+    inputTokens: numberField(usage.prompt_tokens ?? usage.input_tokens),
+    outputTokens: numberField(usage.completion_tokens ?? usage.output_tokens),
+    totalTokens: numberField(usage.total_tokens)
+  };
+
+  return parsed.inputTokens !== undefined || parsed.outputTokens !== undefined || parsed.totalTokens !== undefined
+    ? parsed
+    : null;
+}
+
 function processChunkData(
   data: string,
   pending: Map<string, PendingToolCall>
@@ -169,6 +191,11 @@ function processChunkData(
   const events: StreamEvent[] = [];
   let usedTool = false;
   let done = false;
+
+  const usage = parseUsage(payload.usage);
+  if (usage) {
+    events.push({ type: "usage", usage });
+  }
 
   for (let choiceIndex = 0; choiceIndex < choices.length; choiceIndex += 1) {
     const choice = choices[choiceIndex];

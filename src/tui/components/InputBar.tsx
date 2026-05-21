@@ -4,6 +4,7 @@ import TextInput from "ink-text-input";
 import type { SlashCommandDefinition } from "../commands.js";
 import { SlashMenu } from "./SlashMenu.js";
 import { StatusLine } from "./StatusLine.js";
+import type { TokenState } from "../../loop/session.js";
 
 export interface InputBarLayoutState {
   manualCodePrompt: string | null;
@@ -16,7 +17,7 @@ export function getInputBarHeight(state: InputBarLayoutState): number {
   const statusRows = state.status ? 1 : 0;
   const manualPromptRows = state.manualCodePrompt ? 1 : 0;
   const slashMenuRows = state.slashMenuVisible ? Math.max(1, state.slashCommandCount) : 0;
-  return 3 + statusRows + manualPromptRows + slashMenuRows;
+  return 4 + statusRows + manualPromptRows + slashMenuRows;
 }
 
 export interface InputBarProps extends InputBarLayoutState {
@@ -28,7 +29,21 @@ export interface InputBarProps extends InputBarLayoutState {
   onSubmit?: (value: string) => void;
   selectedSlashIndex: number;
   slashCandidates: SlashCommandDefinition[];
+  tokenState: TokenState;
   width: number;
+}
+
+export function formatTokenCount(tokens: number): string {
+  if (tokens >= 1000) {
+    const value = tokens / 1000;
+    return `${value >= 100 ? Math.round(value) : value.toFixed(1)}K`;
+  }
+
+  return String(tokens);
+}
+
+export function formatTokenStatus(state: TokenState): string {
+  return `ctx ${formatTokenCount(state.usedTokens)} / ${formatTokenCount(state.contextWindow)} · ${state.percent.toFixed(1)}%`;
 }
 
 export function InputBar({
@@ -41,6 +56,7 @@ export function InputBar({
   onSubmit,
   selectedSlashIndex,
   slashCandidates,
+  tokenState,
   slashMenuVisible,
   status,
   width
@@ -66,6 +82,9 @@ export function InputBar({
         ) : (
           <TextInput value={input} mask={inputMask} onChange={onChange} onSubmit={onSubmit} />
         )}
+      </Box>
+      <Box paddingX={1}>
+        <Text color={tokenState.warning ? "yellow" : "gray"}>{formatTokenStatus(tokenState)}</Text>
       </Box>
     </Box>
   );
