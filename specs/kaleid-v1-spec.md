@@ -111,14 +111,15 @@ clean-room TS+Node(v24) 骨架，可构建、可全局安装为 `kaleid`。
 ## 安装与发布（公网 npm，kaleid 将公开发布）
 - **包名**：`kaleid`（npm 上未被占用，直接用，非 scoped）。
 - **打包策略**：esbuild `bundle:true` 把运行时依赖（ink/react 等）**一起打进 `dist/index.js`**（单文件、安装零额外 node_modules），`files` 字段只发 `dist/` + README + LICENSE。
-- **LICENSE**：MIT（与 pi 一致），仓库根加 `LICENSE` 文件。
+- **LICENSE**：**不加 LICENSE 文件**（ByAnDa 定）。`package.json` 设 `"license":"UNLICENSED"` —— 保留所有权利：用户可 `npm i -g kaleid` 安装使用，但不授权 fork/修改/再分发源码。
 - **README（面向公众，英文为主）**：项目简介 + 安装 (`npm i -g kaleid`) + `kaleid login`（说明用自己的 ChatGPT 账号登录）+ `kaleid` / `kaleid "<prompt>"` 用法 + 默认模型 + 免责声明（用 ChatGPT 订阅经 OAuth，受 OpenAI 政策约束，凭证仅存本地 `~/.kaleid/auth.json`）。
-- **package.json 发布字段**：`name/version/description/bin/files/license:"MIT"/repository/keywords/engines`，`"publishConfig":{"access":"public"}`。
+- **package.json 发布字段**：`name/version/description/bin/files/license:"UNLICENSED"/repository/keywords/engines`，`"publishConfig":{"access":"public"}`。
 - **发布流程**（脚本化）：`npm run build` → `npm version <patch|minor>`（打 git tag）→ `npm publish --access public` → push tag + GitHub Release。`prepublishOnly` 跑 build + typecheck。
 - **可选 CI**：GitHub Actions 在 push tag (`v*`) 时自动 build + `npm publish`（用 `NPM_TOKEN` secret）。V1 可先手动发，CI 作为加分项。
 
 ## 涉及文件（新建）
-`package.json` / `tsconfig.json` / `esbuild.config.mjs` / `README.md` / `LICENSE` / `src/index.ts` / `src/cli/args.ts` / （可选）`.github/workflows/publish.yml`
+`package.json` / `tsconfig.json` / `esbuild.config.mjs` / `README.md` / `src/index.ts` / `src/cli/args.ts` / （可选）`.github/workflows/publish.yml`
+（不加 LICENSE 文件，per ByAnDa）
 
 ---
 
