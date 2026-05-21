@@ -20,6 +20,15 @@ import { editTool } from "../src/tools/edit.js";
 import { readTool } from "../src/tools/read.js";
 import { writeTool } from "../src/tools/write.js";
 import { getSlashCommandCompletions, parseSlash, runSlashCommand } from "../src/tui/commands.js";
+import {
+  buildConversationEntries,
+  getVisibleConversationEntries
+} from "../src/tui/components/Conversation.js";
+import { getInputBarHeight } from "../src/tui/components/InputBar.js";
+import { getMessageStyle } from "../src/tui/components/Message.js";
+import { formatToolCallLine } from "../src/tui/components/ToolCall.js";
+import { ALT_SCREEN_ENTER, ALT_SCREEN_EXIT, enterAlternateScreen } from "../src/tui/terminal.js";
+import type { Msg } from "../src/tui/types.js";
 
 function fakeJwt(accountId: string): string {
   const header = Buffer.from(JSON.stringify({ alg: "none" })).toString("base64url");
@@ -235,6 +244,88 @@ test("slash login forwards OAuth callbacks and saves the returned credentials", 
   assert.equal(saved, freshCreds);
   assert.deepEqual(events, ["url:https://auth.example/", "status:waiting", "manual"]);
   assert.deepEqual(result.messages, ["登录成功: acct_callback"]);
+});
+
+test("TUI fullscreen helpers enter and restore alternate screen for TTY output", () => {
+  const chunks: string[] = [];
+  const restore = enterAlternateScreen({
+    isTTY: true,
+    write: (chunk) => {
+      chunks.push(chunk);
+    }
+  });
+
+  assert.deepEqual(chunks, [ALT_SCREEN_ENTER]);
+  restore();
+  restore();
+  assert.deepEqual(chunks, [ALT_SCREEN_ENTER, ALT_SCREEN_EXIT]);
+
+  const nonTtyChunks: string[] = [];
+  const noopRestore = enterAlternateScreen({
+    isTTY: false,
+    write: (chunk) => {
+      nonTtyChunks.push(chunk);
+    }
+  });
+  noopRestore();
+  assert.deepEqual(nonTtyChunks, []);
+});
+
+test("TUI conversation keeps newest messages pinned to the bottom", () => {
+  const messages: Msg[] = Array.from({ length: 6 }, (_, index) => ({
+    id: `m${index + 1}`,
+    role: index % 2 === 0 ? "user" : "assistant",
+    text: `message ${index + 1}`
+  }));
+
+  const visible = getVisibleConversationEntries(buildConversationEntries(messages, null), 3, 40);
+  assert.deepEqual(visible.map((entry) => entry.id), ["m4", "m5", "m6"]);
+
+  const withStreaming = getVisibleConversationEntries(buildConversationEntries(messages, "streaming answer"), 2, 40);
+  assert.deepEqual(withStreaming.map((entry) => entry.id), ["m6", "streaming"]);
+
+  const trimmed = getVisibleConversationEntries(buildConversationEntries([], "line 1\nline 2\nline 3"), 2, 40);
+  assert.equal(trimmed[0]?.kind, "streaming");
+  assert.equal(trimmed[0]?.kind === "streaming" ? trimmed[0].text : "", "line 2\nline 3");
+});
+
+test("TUI message labels and tool calls use distinct visual roles", () => {
+  assert.deepEqual(getMessageStyle("user"), { label: "you ›", color: "green", bold: true });
+  assert.deepEqual(getMessageStyle("assistant"), { label: "kaleid ›", color: "cyan" });
+  assert.deepEqual(getMessageStyle("system"), { label: "system ›", color: "gray", dimColor: true });
+
+  const success = formatToolCallLine(
+    { name: "bash", args: { command: "npm test" }, resultSummary: "passed" },
+    80
+  );
+  assert.match(success, /^⏺ bash\(/u);
+  assert.match(success, /✔ passed/u);
+
+  const failure = formatToolCallLine(
+    { name: "read", args: { path: "missing.txt" }, resultSummary: "not found", isError: true },
+    80
+  );
+  assert.match(failure, /✘ not found/u);
+});
+
+test("TUI input footer reserves rows for status, slash menu, and OAuth paste mode", () => {
+  assert.equal(
+    getInputBarHeight({ manualCodePrompt: null, slashCommandCount: 4, slashMenuVisible: false, status: null }),
+    3
+  );
+  assert.equal(
+    getInputBarHeight({ manualCodePrompt: null, slashCommandCount: 4, slashMenuVisible: true, status: null }),
+    7
+  );
+  assert.equal(
+    getInputBarHeight({
+      manualCodePrompt: "粘贴 OAuth code 或回调 URL，回车提交",
+      slashCommandCount: 0,
+      slashMenuVisible: true,
+      status: "waiting"
+    }),
+    6
+  );
 });
 
 test("OAuth helpers decode account ids and refresh via mocked token endpoint", async () => {

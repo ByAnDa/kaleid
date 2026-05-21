@@ -1,22 +1,15 @@
-import React, { useCallback, useMemo, useRef, useState } from "react";
-import { Box, Static, Text, useApp, useInput } from "ink";
-import TextInput from "ink-text-input";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Box, useApp, useInput } from "ink";
 import type { runTurn as runTurnFn } from "../loop/agent-loop.js";
 import type { Session } from "../loop/session.js";
 import type { LLMProvider } from "../provider/types.js";
 import type { Tool } from "../tools/types.js";
-import type { ToolCallView } from "./components/ToolCall.js";
 import { getSlashCommandCompletions, parseSlash, runSlashCommand } from "./commands.js";
-import { Message } from "./components/Message.js";
-import { SlashMenu } from "./components/SlashMenu.js";
-import { StatusLine } from "./components/StatusLine.js";
-
-export interface Msg {
-  id: string;
-  role: "user" | "assistant" | "tool" | "error" | "system";
-  text: string;
-  tool?: ToolCallView;
-}
+import { Conversation } from "./components/Conversation.js";
+import { Header, HEADER_HEIGHT } from "./components/Header.js";
+import { InputBar, getInputBarHeight } from "./components/InputBar.js";
+import { getTerminalDimensions, type TerminalDimensions } from "./terminal.js";
+import type { Msg } from "./types.js";
 
 export interface AppProps {
   model: string;
@@ -35,8 +28,28 @@ function nextId(): string {
   return crypto.randomUUID();
 }
 
+function useTerminalDimensions(): TerminalDimensions {
+  const [dimensions, setDimensions] = useState<TerminalDimensions>(() => getTerminalDimensions());
+
+  useEffect(() => {
+    const updateDimensions = () => {
+      setDimensions(getTerminalDimensions());
+    };
+
+    process.stdout.on("resize", updateDimensions);
+    updateDimensions();
+
+    return () => {
+      process.stdout.off("resize", updateDimensions);
+    };
+  }, []);
+
+  return dimensions;
+}
+
 export function App({ model, cwd, session, provider, tools, runTurn }: AppProps): React.ReactElement {
   const { exit } = useApp();
+  const terminal = useTerminalDimensions();
   const [history, setHistory] = useState<Msg[]>([]);
   const [streaming, setStreaming] = useState<string | null>(null);
   const [status, setStatus] = useState<string | null>(null);
@@ -47,9 +60,17 @@ export function App({ model, cwd, session, provider, tools, runTurn }: AppProps)
   const [manualCodePrompt, setManualCodePrompt] = useState<string | null>(null);
   const abortRef = useRef<AbortController | null>(null);
   const manualCodeRef = useRef<{ resolve: (value: string) => void; reject: (error: Error) => void } | null>(null);
-  const slashCandidates = useMemo(() => getSlashCommandCompletions(input) ?? [], [input]);
-  const slashMenuVisible = !busy && !manualCodePrompt && slashMenuOpen && getSlashCommandCompletions(input) !== null;
+  const slashCompletions = useMemo(() => getSlashCommandCompletions(input), [input]);
+  const slashCandidates = slashCompletions ?? [];
+  const slashMenuVisible = !busy && !manualCodePrompt && slashMenuOpen && slashCompletions !== null;
   const selectedSlashIndex = slashCandidates.length === 0 ? -1 : Math.min(slashMenuIndex, slashCandidates.length - 1);
+  const inputBarHeight = getInputBarHeight({
+    manualCodePrompt,
+    slashCommandCount: slashCandidates.length,
+    slashMenuVisible,
+    status
+  });
+  const conversationHeight = Math.max(1, terminal.rows - HEADER_HEIGHT - inputBarHeight);
 
   const commit = useCallback((msg: Msg) => {
     setHistory((current) => [...current, msg]);
@@ -268,24 +289,22 @@ export function App({ model, cwd, session, provider, tools, runTurn }: AppProps)
   );
 
   return (
-    <Box flexDirection="column">
-      <Static items={history}>{(msg) => <Message key={msg.id} msg={msg} />}</Static>
-      {streaming ? <Text color="cyan">{streaming}</Text> : null}
-      {status ? <StatusLine status={status} /> : null}
-      {!busy || manualCodePrompt ? (
-        <>
-          {manualCodePrompt ? <Text color="yellow">{manualCodePrompt}</Text> : null}
-          <Box>
-            <Text color="green">{manualCodePrompt ? "oauth> " : "> "}</Text>
-            <TextInput
-              value={input}
-              onChange={updateInput}
-              onSubmit={slashMenuVisible ? undefined : submit}
-            />
-          </Box>
-          {slashMenuVisible ? <SlashMenu commands={slashCandidates} selectedIndex={selectedSlashIndex} /> : null}
-        </>
-      ) : null}
+    <Box flexDirection="column" height={terminal.rows} width={terminal.columns}>
+      <Header model={model} width={terminal.columns} />
+      <Conversation height={conversationHeight} messages={history} streaming={streaming} width={terminal.columns} />
+      <InputBar
+        disabled={busy && !manualCodePrompt}
+        input={input}
+        manualCodePrompt={manualCodePrompt}
+        onChange={updateInput}
+        onSubmit={slashMenuVisible ? undefined : submit}
+        selectedSlashIndex={selectedSlashIndex}
+        slashCandidates={slashCandidates}
+        slashCommandCount={slashCandidates.length}
+        slashMenuVisible={slashMenuVisible}
+        status={status}
+        width={terminal.columns}
+      />
     </Box>
   );
 }

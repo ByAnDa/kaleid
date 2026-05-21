@@ -5,6 +5,7 @@ import { runTurn } from "../loop/agent-loop.js";
 import { OpenAICodexProvider } from "../provider/openai-codex.js";
 import { tools } from "../tools/index.js";
 import { App } from "../tui/app.js";
+import { enterAlternateScreen } from "../tui/terminal.js";
 
 export interface ReplOptions {
   model: string;
@@ -14,7 +15,8 @@ export interface ReplOptions {
 export function runRepl(options: ReplOptions): void {
   const session = createSession();
   const provider = new OpenAICodexProvider();
-  render(
+  const restoreScreen = enterAlternateScreen(process.stdout);
+  const instance = render(
     React.createElement(App, {
       model: options.model,
       cwd: options.cwd,
@@ -22,6 +24,9 @@ export function runRepl(options: ReplOptions): void {
       provider,
       tools,
       runTurn
-    })
+    }),
+    { exitOnCtrlC: false }
   );
+
+  void instance.waitUntilExit().finally(restoreScreen);
 }
