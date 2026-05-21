@@ -37,6 +37,8 @@ export interface SlashCommandContext {
 export const SLASH_COMMANDS: SlashCommandDefinition[] = [
   { command: "/login", description: "Sign in with OpenAI OAuth" },
   { command: "/logout", description: "Sign out and remove ~/.kaleid/auth.json" },
+  { command: "/model", description: "Select the current model" },
+  { command: "/reasoning", description: "Select reasoning effort" },
   { command: "/exit", description: "Exit kaleid" },
   { command: "/help", description: "Show available slash commands" }
 ];
@@ -91,6 +93,13 @@ export async function runSlashCommand(
     return {
       action: "continue",
       messages: ["已登出。后续请使用 /login 登录。"]
+    };
+  }
+
+  if (parsed.command === "/model" || parsed.command === "/reasoning") {
+    return {
+      action: "continue",
+      messages: [`${parsed.command} is available in the interactive TUI.`]
     };
   }
 

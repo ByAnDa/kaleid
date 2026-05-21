@@ -11,6 +11,13 @@ import { ensureValid, load, NotLoggedInError, save, type Creds } from "../src/au
 import { buildRequestBody } from "../src/provider/responses-encode.js";
 import { parseResponsesSSE } from "../src/provider/responses-sse.js";
 import { OpenAICodexProvider } from "../src/provider/openai-codex.js";
+import {
+  AVAILABLE_MODELS,
+  DEFAULT_MODEL,
+  DEFAULT_REASONING_EFFORT,
+  REASONING_LEVELS,
+  getModelOptions
+} from "../src/provider/models.js";
 import type { ChatParams, LLMProvider, StreamEvent } from "../src/provider/types.js";
 import { runTurn } from "../src/loop/agent-loop.js";
 import { createSession } from "../src/loop/session.js";
@@ -24,8 +31,10 @@ import {
   buildConversationEntries,
   getVisibleConversationEntries
 } from "../src/tui/components/Conversation.js";
+import { formatHeaderState, truncateHeaderState } from "../src/tui/components/Header.js";
 import { getInputBarHeight } from "../src/tui/components/InputBar.js";
 import { getMessageStyle } from "../src/tui/components/Message.js";
+import { formatOptionSelectorLine, getOptionSelectorHeight } from "../src/tui/components/OptionSelector.js";
 import { formatToolCallLine } from "../src/tui/components/ToolCall.js";
 import {
   ALT_SCREEN_ENTER,
@@ -86,6 +95,15 @@ test("parseArgs selects explicit commands, one-shot prompts, and model override"
   assert.equal(parseArgs([]).command, "repl");
   assert.throws(() => parseArgs(["login"]), /Unknown command: login/u);
   assert.throws(() => parseArgs(["logout"]), /Unknown command: logout/u);
+});
+
+test("model and reasoning constants expose selectable defaults", () => {
+  assert.equal(DEFAULT_MODEL, "gpt-5.5");
+  assert.equal(DEFAULT_REASONING_EFFORT, "medium");
+  assert.ok(AVAILABLE_MODELS.some((model) => model.id === DEFAULT_MODEL));
+  assert.deepEqual(REASONING_LEVELS, ["minimal", "low", "medium", "high", "xhigh"]);
+  assert.equal(getModelOptions("custom-model")[0]?.id, "custom-model");
+  assert.equal(getModelOptions("custom-model")[0]?.label, "custom");
 });
 
 test("runCli starts the REPL without requiring login", async () => {
@@ -153,10 +171,13 @@ test("slash command parser and dispatcher handle help, unknown, logout, and logi
   assert.deepEqual(getSlashCommandCompletions("/")?.map((command) => command.command), [
     "/login",
     "/logout",
+    "/model",
+    "/reasoning",
     "/exit",
     "/help"
   ]);
   assert.deepEqual(getSlashCommandCompletions("/lo")?.map((command) => command.command), ["/login", "/logout"]);
+  assert.deepEqual(getSlashCommandCompletions("/mo")?.map((command) => command.command), ["/model"]);
   assert.deepEqual(getSlashCommandCompletions("/nope"), []);
   assert.equal(getSlashCommandCompletions("plain /"), null);
   assert.equal(getSlashCommandCompletions("/login now"), null);
@@ -165,6 +186,8 @@ test("slash command parser and dispatcher handle help, unknown, logout, and logi
   assert.equal(help.action, "continue");
   assert.match(help.messages[0] ?? "", /\/login/u);
   assert.match(help.messages[0] ?? "", /\/logout/u);
+  assert.match(help.messages[0] ?? "", /\/model/u);
+  assert.match(help.messages[0] ?? "", /\/reasoning/u);
   assert.match(help.messages[0] ?? "", /\/exit/u);
   assert.match(help.messages[0] ?? "", /\/help/u);
 
@@ -353,6 +376,17 @@ test("TUI message labels and tool calls use distinct visual roles", () => {
   assert.match(failure, /✘ not found/u);
 });
 
+test("TUI header and option selector format model and reasoning state", () => {
+  assert.equal(formatHeaderState("gpt-5.5", "high"), "gpt-5.5 · high");
+  assert.equal(truncateHeaderState("gpt-5.5-pro · medium", 12), "gpt-5.5-p...");
+  assert.equal(getOptionSelectorHeight(5), 8);
+  assert.equal(
+    formatOptionSelectorLine({ id: "gpt-5.5", current: true }, true),
+    "> * gpt-5.5 (current)"
+  );
+  assert.equal(formatOptionSelectorLine({ id: "high", current: false }, false), "    high");
+});
+
 test("TUI input footer reserves rows for status, slash menu, and OAuth paste mode", () => {
   assert.equal(
     getInputBarHeight({ manualCodePrompt: null, slashCommandCount: 4, slashMenuVisible: false, status: null }),
@@ -536,14 +570,27 @@ test("Responses encoder preserves messages, tool calls, tool outputs, and tool s
       { role: "assistant", content: "", toolCalls: [{ id: "call_1", name: "read", arguments: { path: "a.txt" } }] },
       { role: "tool", content: "1\tok", toolCallId: "call_1" }
     ],
-    tools: [{ name: "read", description: "Read", parameters: { type: "object" } }]
+    tools: [{ name: "read", description: "Read", parameters: { type: "object" } }],
+    reasoningEffort: "high"
   });
 
   assert.equal(body.prompt_cache_key, "session_1");
+  assert.equal(body.reasoning.effort, "high");
   assert.equal(body.input[0]?.type, "message");
   assert.equal(body.input[1]?.type, "function_call");
   assert.equal(body.input[2]?.type, "function_call_output");
   assert.equal(body.tools[0]?.type, "function");
+});
+
+test("Responses encoder defaults reasoning effort to medium", () => {
+  const body = buildRequestBody({
+    model: "gpt-5.5",
+    systemPrompt: "system",
+    messages: [],
+    tools: []
+  });
+
+  assert.equal(body.reasoning.effort, "medium");
 });
 
 test("Responses SSE parser yields text, tool calls, and tool-call finish reason from fixtures", async () => {
@@ -671,9 +718,11 @@ test("runTurn executes requested tools, feeds results back, and finishes", async
   const dir = await mkdtemp(join(tmpdir(), "kaleid-loop-"));
   try {
     let calls = 0;
+    const seenRequests: Array<Pick<ChatParams, "model" | "reasoningEffort">> = [];
     const provider: LLMProvider = {
       id: "fake",
-      async *chat(_params: ChatParams): AsyncIterable<StreamEvent> {
+      async *chat(params: ChatParams): AsyncIterable<StreamEvent> {
+        seenRequests.push({ model: params.model, reasoningEffort: params.reasoningEffort });
         calls += 1;
         if (calls === 1) {
           yield {
@@ -690,10 +739,20 @@ test("runTurn executes requested tools, feeds results back, and finishes", async
 
     const session = createSession();
     const events = await collect(
-      runTurn(session, "create a file", { provider, tools: [writeTool], model: "fake-model", cwd: dir })
+      runTurn(session, "create a file", {
+        provider,
+        tools: [writeTool],
+        model: "fake-model",
+        reasoningEffort: "high",
+        cwd: dir
+      })
     );
 
     assert.equal(await readFile(join(dir, "out.txt"), "utf8"), "ok");
+    assert.deepEqual(seenRequests, [
+      { model: "fake-model", reasoningEffort: "high" },
+      { model: "fake-model", reasoningEffort: "high" }
+    ]);
     assert.deepEqual(events.map((event) => event.type), ["tool_start", "tool_end", "assistant_text", "turn_done"]);
     assert.deepEqual(session.messages.map((message) => message.role), ["user", "assistant", "tool", "assistant"]);
   } finally {

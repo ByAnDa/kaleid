@@ -1,6 +1,7 @@
 import type { ToolCall } from "../provider/types.js";
 import type { Tool, ToolResult } from "../tools/types.js";
 import type { LLMProvider } from "../provider/types.js";
+import type { ReasoningEffort } from "../provider/models.js";
 
 export type AgentEvent =
   | { type: "assistant_text"; delta: string }
@@ -13,6 +14,7 @@ export interface RunOptions {
   provider: LLMProvider;
   tools: Tool[];
   model: string;
+  reasoningEffort?: ReasoningEffort;
   cwd: string;
   signal?: AbortSignal;
 }

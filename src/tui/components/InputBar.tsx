@@ -21,6 +21,7 @@ export function getInputBarHeight(state: InputBarLayoutState): number {
 
 export interface InputBarProps extends InputBarLayoutState {
   disabled: boolean;
+  disabledLabel?: string;
   input: string;
   onChange: (value: string) => void;
   onSubmit?: (value: string) => void;
@@ -31,6 +32,7 @@ export interface InputBarProps extends InputBarLayoutState {
 
 export function InputBar({
   disabled,
+  disabledLabel,
   input,
   manualCodePrompt,
   onChange,
@@ -58,7 +60,7 @@ export function InputBar({
           {prompt}
         </Text>
         {disabled ? (
-          <Text color="gray">{status ?? "working..."}</Text>
+          <Text color="gray">{disabledLabel ?? status ?? "working..."}</Text>
         ) : (
           <TextInput value={input} onChange={onChange} onSubmit={onSubmit} />
         )}

@@ -54,6 +54,7 @@ export async function* runTurn(
         messages: session.messages,
         tools: toToolSchemas(opts.tools),
         model: opts.model,
+        reasoningEffort: opts.reasoningEffort,
         systemPrompt: buildSystemPrompt(opts.cwd),
         signal: opts.signal,
         sessionId: session.id

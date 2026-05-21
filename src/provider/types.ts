@@ -1,3 +1,5 @@
+import type { ReasoningEffort } from "./models.js";
+
 export interface ToolCall {
   id: string;
   name: string;
@@ -26,6 +28,7 @@ export interface ChatParams {
   messages: ChatMessage[];
   tools: ToolSchema[];
   model: string;
+  reasoningEffort?: ReasoningEffort;
   systemPrompt: string;
   signal?: AbortSignal;
   sessionId?: string;

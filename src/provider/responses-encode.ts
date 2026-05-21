@@ -1,4 +1,5 @@
 import type { ChatMessage, ChatParams, ToolSchema } from "./types.js";
+import { DEFAULT_REASONING_EFFORT, type ReasoningEffort } from "./models.js";
 
 type ResponsesInputItem =
   | {
@@ -24,6 +25,7 @@ export interface ResponsesRequestBody {
   stream: true;
   instructions: string;
   input: ResponsesInputItem[];
+  reasoning: { effort: ReasoningEffort };
   text: { verbosity: "low" };
   include: string[];
   prompt_cache_key?: string;
@@ -97,6 +99,7 @@ export function buildRequestBody(params: ChatParams): ResponsesRequestBody {
     stream: true,
     instructions: params.systemPrompt,
     input: encodeMessages(params.messages),
+    reasoning: { effort: params.reasoningEffort ?? DEFAULT_REASONING_EFFORT },
     text: { verbosity: "low" },
     include: ["reasoning.encrypted_content"],
     ...(params.sessionId ? { prompt_cache_key: params.sessionId } : {}),

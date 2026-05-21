@@ -1,4 +1,6 @@
-export const DEFAULT_MODEL = "gpt-5.5";
+import { DEFAULT_MODEL } from "../provider/models.js";
+
+export { DEFAULT_MODEL };
 
 export type Command = "repl" | "oneshot";
 
@@ -18,6 +20,8 @@ export const USAGE = `Usage:
 Inside the REPL:
   /login          Sign in
   /logout         Sign out
+  /model          Select model
+  /reasoning      Select reasoning effort
   /exit           Exit
   /help           Show slash commands
 

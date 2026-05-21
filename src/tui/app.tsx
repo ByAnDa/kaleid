@@ -2,12 +2,24 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { Box, useApp, useInput } from "ink";
 import type { runTurn as runTurnFn } from "../loop/agent-loop.js";
 import type { Session } from "../loop/session.js";
+import {
+  DEFAULT_REASONING_EFFORT,
+  REASONING_LEVELS,
+  getModelOptions,
+  isReasoningEffort,
+  type ReasoningEffort
+} from "../provider/models.js";
 import type { LLMProvider } from "../provider/types.js";
 import type { Tool } from "../tools/types.js";
 import { getSlashCommandCompletions, parseSlash, runSlashCommand } from "./commands.js";
 import { Conversation } from "./components/Conversation.js";
 import { Header, HEADER_HEIGHT } from "./components/Header.js";
 import { InputBar, getInputBarHeight } from "./components/InputBar.js";
+import {
+  OptionSelector,
+  getOptionSelectorHeight,
+  type OptionSelectorItem
+} from "./components/OptionSelector.js";
 import { getTerminalDimensions, type TerminalDimensions } from "./terminal.js";
 import type { Msg } from "./types.js";
 
@@ -26,6 +38,21 @@ function summarize(text: string): string {
 
 function nextId(): string {
   return crypto.randomUUID();
+}
+
+type SelectorKind = "model" | "reasoning";
+
+function moveSelection(current: number, direction: -1 | 1, count: number): number {
+  if (count <= 0) {
+    return 0;
+  }
+
+  return (current + direction + count) % count;
+}
+
+function getCurrentIndex(options: OptionSelectorItem[]): number {
+  const currentIndex = options.findIndex((option) => option.current);
+  return currentIndex >= 0 ? currentIndex : 0;
 }
 
 function useTerminalDimensions(): TerminalDimensions {
@@ -50,33 +77,63 @@ function useTerminalDimensions(): TerminalDimensions {
 export function App({ model, cwd, session, provider, tools, runTurn }: AppProps): React.ReactElement {
   const { exit } = useApp();
   const terminal = useTerminalDimensions();
+  const [currentModel, setCurrentModel] = useState(model);
+  const [reasoningEffort, setReasoningEffort] = useState<ReasoningEffort>(DEFAULT_REASONING_EFFORT);
   const [history, setHistory] = useState<Msg[]>([]);
   const [streaming, setStreaming] = useState<string | null>(null);
   const [status, setStatus] = useState<string | null>(null);
   const [input, setInput] = useState("");
   const [slashMenuOpen, setSlashMenuOpen] = useState(false);
   const [slashMenuIndex, setSlashMenuIndex] = useState(0);
+  const [activeSelector, setActiveSelector] = useState<SelectorKind | null>(null);
+  const [selectorIndex, setSelectorIndex] = useState(0);
   const [busy, setBusy] = useState(false);
   const [manualCodePrompt, setManualCodePrompt] = useState<string | null>(null);
   const abortRef = useRef<AbortController | null>(null);
   const manualCodeRef = useRef<{ resolve: (value: string) => void; reject: (error: Error) => void } | null>(null);
   const slashCompletions = useMemo(() => getSlashCommandCompletions(input), [input]);
   const slashCandidates = slashCompletions ?? [];
-  const slashMenuVisible = !busy && !manualCodePrompt && slashMenuOpen && slashCompletions !== null;
+  const slashMenuVisible = !busy && !manualCodePrompt && !activeSelector && slashMenuOpen && slashCompletions !== null;
   const selectedSlashIndex = slashCandidates.length === 0 ? -1 : Math.min(slashMenuIndex, slashCandidates.length - 1);
+  const modelOptions = useMemo<OptionSelectorItem[]>(
+    () =>
+      getModelOptions(currentModel).map((option) => ({
+        id: option.id,
+        label: option.label,
+        current: option.id === currentModel
+      })),
+    [currentModel]
+  );
+  const reasoningOptions = useMemo<OptionSelectorItem[]>(
+    () =>
+      REASONING_LEVELS.map((level) => ({
+        id: level,
+        current: level === reasoningEffort
+      })),
+    [reasoningEffort]
+  );
+  const selectorOptions = activeSelector === "model" ? modelOptions : activeSelector === "reasoning" ? reasoningOptions : [];
+  const selectedSelectorIndex =
+    selectorOptions.length === 0 ? -1 : Math.min(selectorIndex, selectorOptions.length - 1);
+  const selectorVisible = activeSelector !== null;
+  const selectorHeight = selectorVisible ? getOptionSelectorHeight(selectorOptions.length) : 0;
   const inputBarHeight = getInputBarHeight({
     manualCodePrompt,
     slashCommandCount: slashCandidates.length,
     slashMenuVisible,
     status
   });
-  const conversationHeight = Math.max(1, terminal.rows - HEADER_HEIGHT - inputBarHeight);
+  const conversationHeight = Math.max(1, terminal.rows - HEADER_HEIGHT - selectorHeight - inputBarHeight);
 
   const commit = useCallback((msg: Msg) => {
     setHistory((current) => [...current, msg]);
   }, []);
 
   const updateInput = useCallback((value: string) => {
+    if (activeSelector) {
+      return;
+    }
+
     setInput(value);
     if (manualCodePrompt) {
       setSlashMenuOpen(false);
@@ -89,7 +146,7 @@ export function App({ model, cwd, session, provider, tools, runTurn }: AppProps)
     } else {
       setSlashMenuOpen(false);
     }
-  }, [manualCodePrompt]);
+  }, [activeSelector, manualCodePrompt]);
 
   const completeSlashCommand = useCallback(() => {
     const selected = slashCandidates[selectedSlashIndex];
@@ -99,6 +156,41 @@ export function App({ model, cwd, session, provider, tools, runTurn }: AppProps)
       setSlashMenuIndex(0);
     }
   }, [selectedSlashIndex, slashCandidates]);
+
+  const openSelector = useCallback(
+    (kind: SelectorKind) => {
+      const options = kind === "model" ? modelOptions : reasoningOptions;
+      setInput("");
+      setSlashMenuOpen(false);
+      setSlashMenuIndex(0);
+      setActiveSelector(kind);
+      setSelectorIndex(getCurrentIndex(options));
+    },
+    [modelOptions, reasoningOptions]
+  );
+
+  const closeSelector = useCallback(() => {
+    setActiveSelector(null);
+    setSelectorIndex(0);
+  }, []);
+
+  const applySelector = useCallback(() => {
+    const selected = selectorOptions[selectedSelectorIndex];
+    if (!activeSelector || !selected) {
+      closeSelector();
+      return;
+    }
+
+    if (activeSelector === "model") {
+      setCurrentModel(selected.id);
+      commit({ id: nextId(), role: "system", text: `已切换模型: ${selected.id}` });
+    } else if (isReasoningEffort(selected.id)) {
+      setReasoningEffort(selected.id);
+      commit({ id: nextId(), role: "system", text: `已切换推理强度: ${selected.id}` });
+    }
+
+    closeSelector();
+  }, [activeSelector, closeSelector, commit, selectedSelectorIndex, selectorOptions]);
 
   useInput((value, key) => {
     if (key.ctrl && value === "c") {
@@ -112,6 +204,29 @@ export function App({ model, cwd, session, provider, tools, runTurn }: AppProps)
       } else {
         exit();
       }
+    }
+
+    if (activeSelector) {
+      if (key.escape) {
+        closeSelector();
+        return;
+      }
+
+      if (key.upArrow) {
+        setSelectorIndex((current) => moveSelection(current, -1, selectorOptions.length));
+        return;
+      }
+
+      if (key.downArrow) {
+        setSelectorIndex((current) => moveSelection(current, 1, selectorOptions.length));
+        return;
+      }
+
+      if (key.return) {
+        applySelector();
+      }
+
+      return;
     }
 
     if (!slashMenuVisible) {
@@ -171,6 +286,16 @@ export function App({ model, cwd, session, provider, tools, runTurn }: AppProps)
 
       const slash = parseSlash(value);
       if (slash) {
+        if (slash.command === "/model") {
+          openSelector("model");
+          return;
+        }
+
+        if (slash.command === "/reasoning") {
+          openSelector("reasoning");
+          return;
+        }
+
         const isLoginCommand = slash.command === "/login";
         setSlashMenuOpen(false);
         setBusy(true);
@@ -228,7 +353,8 @@ export function App({ model, cwd, session, provider, tools, runTurn }: AppProps)
         for await (const event of runTurn(session, prompt, {
           provider,
           tools,
-          model,
+          model: currentModel,
+          reasoningEffort,
           cwd,
           signal: abort.signal
         })) {
@@ -268,7 +394,22 @@ export function App({ model, cwd, session, provider, tools, runTurn }: AppProps)
         setStatus(null);
       }
     },
-    [busy, commit, cwd, exit, manualCodePrompt, model, provider, runTurn, session, startManualCodeInput, tools, updateInput]
+    [
+      busy,
+      commit,
+      currentModel,
+      cwd,
+      exit,
+      manualCodePrompt,
+      openSelector,
+      provider,
+      reasoningEffort,
+      runTurn,
+      session,
+      startManualCodeInput,
+      tools,
+      updateInput
+    ]
   );
 
   useInput(
@@ -290,14 +431,23 @@ export function App({ model, cwd, session, provider, tools, runTurn }: AppProps)
 
   return (
     <Box flexDirection="column" height={terminal.rows} width={terminal.columns}>
-      <Header model={model} width={terminal.columns} />
+      <Header model={currentModel} reasoningEffort={reasoningEffort} width={terminal.columns} />
       <Conversation height={conversationHeight} messages={history} streaming={streaming} width={terminal.columns} />
+      {selectorVisible ? (
+        <OptionSelector
+          options={selectorOptions}
+          selectedIndex={selectedSelectorIndex}
+          title={activeSelector === "model" ? "Select model" : "Select reasoning effort"}
+          width={terminal.columns}
+        />
+      ) : null}
       <InputBar
-        disabled={busy && !manualCodePrompt}
+        disabled={selectorVisible || (busy && !manualCodePrompt)}
+        disabledLabel={selectorVisible ? "" : undefined}
         input={input}
         manualCodePrompt={manualCodePrompt}
         onChange={updateInput}
-        onSubmit={slashMenuVisible ? undefined : submit}
+        onSubmit={slashMenuVisible || selectorVisible ? undefined : submit}
         selectedSlashIndex={selectedSlashIndex}
         slashCandidates={slashCandidates}
         slashCommandCount={slashCandidates.length}
