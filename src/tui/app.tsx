@@ -44,9 +44,11 @@ export function App({ model, cwd, session, provider, tools, runTurn }: AppProps)
   const [slashMenuOpen, setSlashMenuOpen] = useState(false);
   const [slashMenuIndex, setSlashMenuIndex] = useState(0);
   const [busy, setBusy] = useState(false);
+  const [manualCodePrompt, setManualCodePrompt] = useState<string | null>(null);
   const abortRef = useRef<AbortController | null>(null);
+  const manualCodeRef = useRef<{ resolve: (value: string) => void; reject: (error: Error) => void } | null>(null);
   const slashCandidates = useMemo(() => getSlashCommandCompletions(input) ?? [], [input]);
-  const slashMenuVisible = !busy && slashMenuOpen && getSlashCommandCompletions(input) !== null;
+  const slashMenuVisible = !busy && !manualCodePrompt && slashMenuOpen && getSlashCommandCompletions(input) !== null;
   const selectedSlashIndex = slashCandidates.length === 0 ? -1 : Math.min(slashMenuIndex, slashCandidates.length - 1);
 
   const commit = useCallback((msg: Msg) => {
@@ -55,13 +57,18 @@ export function App({ model, cwd, session, provider, tools, runTurn }: AppProps)
 
   const updateInput = useCallback((value: string) => {
     setInput(value);
+    if (manualCodePrompt) {
+      setSlashMenuOpen(false);
+      return;
+    }
+
     if (getSlashCommandCompletions(value) !== null) {
       setSlashMenuOpen(true);
       setSlashMenuIndex(0);
     } else {
       setSlashMenuOpen(false);
     }
-  }, []);
+  }, [manualCodePrompt]);
 
   const completeSlashCommand = useCallback(() => {
     const selected = slashCandidates[selectedSlashIndex];
@@ -75,6 +82,10 @@ export function App({ model, cwd, session, provider, tools, runTurn }: AppProps)
   useInput((value, key) => {
     if (key.ctrl && value === "c") {
       if (busy) {
+        manualCodeRef.current?.reject(new Error("OAuth login cancelled"));
+        manualCodeRef.current = null;
+        setManualCodePrompt(null);
+        setInput("");
         abortRef.current?.abort();
         setStatus("aborting...");
       } else {
@@ -106,8 +117,30 @@ export function App({ model, cwd, session, provider, tools, runTurn }: AppProps)
     }
   });
 
+  const startManualCodeInput = useCallback(() => {
+    setInput("");
+    setSlashMenuOpen(false);
+    setManualCodePrompt("粘贴 OAuth code 或回调 URL，回车提交");
+    return new Promise<string>((resolve, reject) => {
+      manualCodeRef.current = { resolve, reject };
+    });
+  }, []);
+
   const submit = useCallback(
     async (value: string) => {
+      if (manualCodePrompt) {
+        if (!value.trim()) {
+          return;
+        }
+
+        const pending = manualCodeRef.current;
+        manualCodeRef.current = null;
+        setManualCodePrompt(null);
+        setInput("");
+        pending?.resolve(value);
+        return;
+      }
+
       const prompt = value.trim();
       if (!prompt || busy) {
         return;
@@ -117,11 +150,26 @@ export function App({ model, cwd, session, provider, tools, runTurn }: AppProps)
 
       const slash = parseSlash(value);
       if (slash) {
+        const isLoginCommand = slash.command === "/login";
         setSlashMenuOpen(false);
         setBusy(true);
         setStatus(`running ${slash.command}...`);
         try {
-          const result = await runSlashCommand(slash);
+          const result = await runSlashCommand(slash, {
+            loginOptions: isLoginCommand
+              ? {
+                  onAuthUrl: (url) => {
+                    commit({
+                      id: nextId(),
+                      role: "system",
+                      text: `请在浏览器完成授权（已尝试自动打开）。如未打开，手动复制此链接：\n${url}`
+                    });
+                  },
+                  onStatus: setStatus,
+                  getManualCode: startManualCodeInput
+                }
+              : undefined
+          });
           for (const text of result.messages) {
             commit({ id: nextId(), role: "system", text });
           }
@@ -131,6 +179,8 @@ export function App({ model, cwd, session, provider, tools, runTurn }: AppProps)
         } catch (error) {
           commit({ id: nextId(), role: "error", text: error instanceof Error ? error.message : String(error) });
         } finally {
+          manualCodeRef.current = null;
+          setManualCodePrompt(null);
           setBusy(false);
           setStatus(null);
         }
@@ -197,7 +247,7 @@ export function App({ model, cwd, session, provider, tools, runTurn }: AppProps)
         setStatus(null);
       }
     },
-    [busy, commit, cwd, exit, model, provider, runTurn, session, tools, updateInput]
+    [busy, commit, cwd, exit, manualCodePrompt, model, provider, runTurn, session, startManualCodeInput, tools, updateInput]
   );
 
   useInput(
@@ -222,10 +272,11 @@ export function App({ model, cwd, session, provider, tools, runTurn }: AppProps)
       <Static items={history}>{(msg) => <Message key={msg.id} msg={msg} />}</Static>
       {streaming ? <Text color="cyan">{streaming}</Text> : null}
       {status ? <StatusLine status={status} /> : null}
-      {!busy ? (
+      {!busy || manualCodePrompt ? (
         <>
+          {manualCodePrompt ? <Text color="yellow">{manualCodePrompt}</Text> : null}
           <Box>
-            <Text color="green">&gt; </Text>
+            <Text color="green">{manualCodePrompt ? "oauth> " : "> "}</Text>
             <TextInput
               value={input}
               onChange={updateInput}

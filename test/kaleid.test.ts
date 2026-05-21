@@ -196,6 +196,47 @@ test("slash command parser and dispatcher handle help, unknown, logout, and logi
   assert.match(loginResult.messages.join("\n"), /登录成功: acct_new/u);
 });
 
+test("slash login forwards OAuth callbacks and saves the returned credentials", async () => {
+  const freshCreds: Creds = {
+    access: "access",
+    refresh: "refresh",
+    expires: Date.now() + 1000,
+    accountId: "acct_callback"
+  };
+  const events: string[] = [];
+  let saved: Creds | null = null;
+  const loginOptions = {
+    onAuthUrl: (url: string) => events.push(`url:${url}`),
+    onStatus: (message: string) => events.push(`status:${message}`),
+    getManualCode: async () => {
+      events.push("manual");
+      return "manual_code";
+    }
+  };
+
+  const result = await runSlashCommand(
+    { command: "/login", args: [] },
+    {
+      load: async () => null,
+      loginOptions,
+      login: async (options) => {
+        assert.equal(options, loginOptions);
+        options?.onAuthUrl?.("https://auth.example/");
+        options?.onStatus?.("waiting");
+        assert.equal(await options?.getManualCode?.(), "manual_code");
+        return freshCreds;
+      },
+      save: async (creds) => {
+        saved = creds;
+      }
+    }
+  );
+
+  assert.equal(saved, freshCreds);
+  assert.deepEqual(events, ["url:https://auth.example/", "status:waiting", "manual"]);
+  assert.deepEqual(result.messages, ["登录成功: acct_callback"]);
+});
+
 test("OAuth helpers decode account ids and refresh via mocked token endpoint", async () => {
   assert.equal(decodeAccountId(fakeJwt("acct_1")), "acct_1");
 
@@ -249,6 +290,63 @@ test("OAuth login prints the authorization URL and accepts manual code when the 
   assert.match(stdoutText, /Paste OAuth code or callback URL:/u);
   assert.equal(sawManualCode, true);
   assert.equal(creds.accountId, "acct_manual");
+});
+
+test("OAuth login callbacks expose the URL, accept manual callback URLs, and do not write stdout", async () => {
+  let openedUrl = "";
+  let authUrl = "";
+  const statuses: string[] = [];
+  let sawManualCode = false;
+  const stdout = {
+    write() {
+      throw new Error("stdout should not be used when onAuthUrl is provided");
+    }
+  } as unknown as Pick<NodeJS.WriteStream, "write">;
+
+  const creds = await login({
+    openBrowser: (url) => {
+      openedUrl = url;
+      return false;
+    },
+    stdout,
+    onAuthUrl: (url) => {
+      authUrl = url;
+    },
+    onStatus: (message) => {
+      statuses.push(message);
+    },
+    getManualCode: async () => {
+      const state = new URL(authUrl).searchParams.get("state");
+      return `http://localhost:1455/auth/callback?code=manual_code&state=${state}`;
+    },
+    fetchImpl: async (_url, init) => {
+      const body = init?.body as URLSearchParams;
+      sawManualCode = body.get("grant_type") === "authorization_code" && body.get("code") === "manual_code";
+      return new Response(
+        JSON.stringify({ access_token: fakeJwt("acct_callback"), refresh_token: "refresh_callback", expires_in: 3600 }),
+        { status: 200, headers: { "Content-Type": "application/json" } }
+      );
+    }
+  });
+
+  assert.equal(openedUrl, authUrl);
+  assert.match(authUrl, /^https:\/\/auth\.openai\.com\/oauth\/authorize/u);
+  assert.match(statuses.join("\n"), /等待手动粘贴/u);
+  assert.match(statuses.join("\n"), /正在换取令牌/u);
+  assert.equal(sawManualCode, true);
+  assert.equal(creds.accountId, "acct_callback");
+});
+
+test("OAuth login callback flow surfaces token exchange failures", async () => {
+  await assert.rejects(
+    login({
+      openBrowser: () => true,
+      onAuthUrl: () => undefined,
+      getManualCode: async () => "manual_code",
+      fetchImpl: async () => new Response("bad token", { status: 500, statusText: "Internal Server Error" })
+    }),
+    /OAuth token request failed \(500\): bad token/u
+  );
 });
 
 test("system opener reports failure instead of throwing when the opener binary is missing", async () => {

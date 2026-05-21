@@ -17,6 +17,9 @@ import type { Creds } from "./token-store.js";
 export interface OAuthOptions {
   fetchImpl?: typeof fetch;
   openBrowser?: (url: string) => Promise<boolean> | boolean;
+  onAuthUrl?: (url: string) => void;
+  onStatus?: (message: string) => void;
+  getManualCode?: () => Promise<string>;
   stdout?: Pick<NodeJS.WriteStream, "write">;
   stdin?: NodeJS.ReadStream;
   tokenUrl?: string;
@@ -161,8 +164,13 @@ function tokenResponseToCreds(payload: TokenResponse, refreshFallback?: string):
 
 async function waitForManualCode(
   state: string,
-  options: Pick<OAuthOptions, "stdin" | "stdout"> & { signal?: AbortSignal }
+  options: Pick<OAuthOptions, "getManualCode" | "stdin" | "stdout"> & { signal?: AbortSignal }
 ): Promise<string | null> {
+  if (options.getManualCode) {
+    const input = await options.getManualCode();
+    return parseAuthorizationResponse(input, state);
+  }
+
   const stdin = options.stdin ?? process.stdin;
   const stdout = options.stdout ?? process.stdout;
 
@@ -193,8 +201,18 @@ export async function login(options: OAuthOptions = {}): Promise<Creds> {
 
   try {
     const opened = await (options.openBrowser ?? systemOpenBrowser)(authorizeUrl);
-    if (!opened || !server.available) {
+    options.onAuthUrl?.(authorizeUrl);
+
+    if (!options.onAuthUrl && (!opened || !server.available)) {
       stdout.write(`Open this URL to authenticate:\n${authorizeUrl}\n`);
+    }
+
+    if (!server.available) {
+      options.onStatus?.("回调端口不可用，请手动粘贴 OAuth code 或回调 URL。");
+    } else if (opened) {
+      options.onStatus?.("已打开浏览器，等待授权回调...");
+    } else {
+      options.onStatus?.("无法自动打开浏览器，等待手动粘贴 OAuth code 或回调 URL。");
     }
 
     const manualAbort = new AbortController();
@@ -220,6 +238,7 @@ export async function login(options: OAuthOptions = {}): Promise<Creds> {
       code_verifier: verifier,
       redirect_uri: REDIRECT_URI
     });
+    options.onStatus?.("正在换取令牌...");
     const payload = await exchangeToken(body, options);
     return tokenResponseToCreds(payload);
   } finally {
