@@ -27,6 +27,7 @@ import { editTool } from "../src/tools/edit.js";
 import { readTool } from "../src/tools/read.js";
 import { writeTool } from "../src/tools/write.js";
 import { getSlashCommandCompletions, parseSlash, runSlashCommand } from "../src/tui/commands.js";
+import { applySelectorTransition, cancelSelectorTransition } from "../src/tui/app.js";
 import {
   buildConversationEntries,
   getVisibleConversationEntries
@@ -100,7 +101,23 @@ test("parseArgs selects explicit commands, one-shot prompts, and model override"
 test("model and reasoning constants expose selectable defaults", () => {
   assert.equal(DEFAULT_MODEL, "gpt-5.5");
   assert.equal(DEFAULT_REASONING_EFFORT, "medium");
+  assert.deepEqual(
+    AVAILABLE_MODELS.map((model) => model.id),
+    [
+      "o4-mini-deep-research",
+      "gpt-5.2",
+      "gpt-5.3-codex",
+      "gpt-5.3-codex-spark",
+      "gpt-5.4",
+      "gpt-5.4-mini",
+      "gpt-5.5"
+    ]
+  );
   assert.ok(AVAILABLE_MODELS.some((model) => model.id === DEFAULT_MODEL));
+  assert.equal(AVAILABLE_MODELS.at(-1)?.id, DEFAULT_MODEL);
+  assert.ok(AVAILABLE_MODELS.every((model) => model.label === "[openai-codex]"));
+  assert.equal(AVAILABLE_MODELS.some((model) => model.id === "gpt-5.5-pro"), false);
+  assert.equal(AVAILABLE_MODELS.some((model) => model.id === "gpt-5.2-codex"), false);
   assert.deepEqual(REASONING_LEVELS, ["minimal", "low", "medium", "high", "xhigh"]);
   assert.equal(getModelOptions("custom-model")[0]?.id, "custom-model");
   assert.equal(getModelOptions("custom-model")[0]?.label, "custom");
@@ -385,6 +402,73 @@ test("TUI header and option selector format model and reasoning state", () => {
     "> * gpt-5.5 (current)"
   );
   assert.equal(formatOptionSelectorLine({ id: "high", current: false }, false), "    high");
+});
+
+test("TUI selector transitions chain model selection into reasoning effort", () => {
+  const modelStep = applySelectorTransition({
+    activeSelector: "model",
+    selectorFlow: "modelEffortChain",
+    selectedId: "gpt-5.4",
+    currentModel: "gpt-5.5",
+    reasoningEffort: "medium"
+  });
+
+  assert.deepEqual(modelStep, {
+    currentModel: "gpt-5.4",
+    reasoningEffort: "medium",
+    nextSelector: "reasoning",
+    nextSelectorFlow: "modelEffortChain",
+    message: null
+  });
+
+  const effortStep = applySelectorTransition({
+    activeSelector: "reasoning",
+    selectorFlow: modelStep.nextSelectorFlow,
+    selectedId: "high",
+    currentModel: modelStep.currentModel,
+    reasoningEffort: modelStep.reasoningEffort
+  });
+
+  assert.deepEqual(effortStep, {
+    currentModel: "gpt-5.4",
+    reasoningEffort: "high",
+    nextSelector: null,
+    nextSelectorFlow: "standalone",
+    message: "已设置: gpt-5.4 · high"
+  });
+});
+
+test("TUI selector Esc keeps chained model and standalone reasoning only changes effort", () => {
+  const skippedEffort = cancelSelectorTransition({
+    activeSelector: "reasoning",
+    selectorFlow: "modelEffortChain",
+    currentModel: "gpt-5.4-mini",
+    reasoningEffort: "medium"
+  });
+
+  assert.deepEqual(skippedEffort, {
+    currentModel: "gpt-5.4-mini",
+    reasoningEffort: "medium",
+    nextSelector: null,
+    nextSelectorFlow: "standalone",
+    message: "已设置模型: gpt-5.4-mini; 推理强度保持 medium"
+  });
+
+  const standaloneReasoning = applySelectorTransition({
+    activeSelector: "reasoning",
+    selectorFlow: "standalone",
+    selectedId: "low",
+    currentModel: "gpt-5.5",
+    reasoningEffort: "medium"
+  });
+
+  assert.deepEqual(standaloneReasoning, {
+    currentModel: "gpt-5.5",
+    reasoningEffort: "low",
+    nextSelector: null,
+    nextSelectorFlow: "standalone",
+    message: "已切换推理强度: low"
+  });
 });
 
 test("TUI input footer reserves rows for status, slash menu, and OAuth paste mode", () => {

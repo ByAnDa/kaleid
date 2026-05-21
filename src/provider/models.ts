@@ -5,13 +5,16 @@ export interface AvailableModel {
 
 export const DEFAULT_MODEL = "gpt-5.5";
 
+// Bundled model registry synced from pi's [openai-codex] table for spec-012.
+// This is not a live list-models query; refresh it when pi's openai-codex table changes.
 export const AVAILABLE_MODELS: AvailableModel[] = [
-  { id: "gpt-5.5" },
-  { id: "gpt-5.5-pro" },
-  { id: "gpt-5.3-codex" },
-  { id: "gpt-5.2-codex" },
-  { id: "gpt-5.1-codex" },
-  { id: "gpt-5-codex" }
+  { id: "o4-mini-deep-research", label: "[openai-codex]" },
+  { id: "gpt-5.2", label: "[openai-codex]" },
+  { id: "gpt-5.3-codex", label: "[openai-codex]" },
+  { id: "gpt-5.3-codex-spark", label: "[openai-codex]" },
+  { id: "gpt-5.4", label: "[openai-codex]" },
+  { id: "gpt-5.4-mini", label: "[openai-codex]" },
+  { id: "gpt-5.5", label: "[openai-codex]" }
 ];
 
 export const REASONING_LEVELS = ["minimal", "low", "medium", "high", "xhigh"] as const;

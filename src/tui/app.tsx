@@ -40,7 +40,31 @@ function nextId(): string {
   return crypto.randomUUID();
 }
 
-type SelectorKind = "model" | "reasoning";
+export type SelectorKind = "model" | "reasoning";
+export type SelectorFlow = "standalone" | "modelEffortChain";
+
+export interface SelectorTransitionInput {
+  activeSelector: SelectorKind;
+  selectorFlow: SelectorFlow;
+  selectedId: string;
+  currentModel: string;
+  reasoningEffort: ReasoningEffort;
+}
+
+export interface SelectorCancelInput {
+  activeSelector: SelectorKind;
+  selectorFlow: SelectorFlow;
+  currentModel: string;
+  reasoningEffort: ReasoningEffort;
+}
+
+export interface SelectorTransition {
+  currentModel: string;
+  reasoningEffort: ReasoningEffort;
+  nextSelector: SelectorKind | null;
+  nextSelectorFlow: SelectorFlow;
+  message: string | null;
+}
 
 function moveSelection(current: number, direction: -1 | 1, count: number): number {
   if (count <= 0) {
@@ -53,6 +77,60 @@ function moveSelection(current: number, direction: -1 | 1, count: number): numbe
 function getCurrentIndex(options: OptionSelectorItem[]): number {
   const currentIndex = options.findIndex((option) => option.current);
   return currentIndex >= 0 ? currentIndex : 0;
+}
+
+export function applySelectorTransition(input: SelectorTransitionInput): SelectorTransition {
+  if (input.activeSelector === "model") {
+    const shouldSelectEffort = input.selectorFlow === "modelEffortChain";
+    return {
+      currentModel: input.selectedId,
+      reasoningEffort: input.reasoningEffort,
+      nextSelector: shouldSelectEffort ? "reasoning" : null,
+      nextSelectorFlow: shouldSelectEffort ? "modelEffortChain" : "standalone",
+      message: shouldSelectEffort ? null : `已切换模型: ${input.selectedId}`
+    };
+  }
+
+  if (isReasoningEffort(input.selectedId)) {
+    return {
+      currentModel: input.currentModel,
+      reasoningEffort: input.selectedId,
+      nextSelector: null,
+      nextSelectorFlow: "standalone",
+      message:
+        input.selectorFlow === "modelEffortChain"
+          ? `已设置: ${input.currentModel} · ${input.selectedId}`
+          : `已切换推理强度: ${input.selectedId}`
+    };
+  }
+
+  return {
+    currentModel: input.currentModel,
+    reasoningEffort: input.reasoningEffort,
+    nextSelector: null,
+    nextSelectorFlow: "standalone",
+    message: null
+  };
+}
+
+export function cancelSelectorTransition(input: SelectorCancelInput): SelectorTransition {
+  if (input.activeSelector === "reasoning" && input.selectorFlow === "modelEffortChain") {
+    return {
+      currentModel: input.currentModel,
+      reasoningEffort: input.reasoningEffort,
+      nextSelector: null,
+      nextSelectorFlow: "standalone",
+      message: `已设置模型: ${input.currentModel}; 推理强度保持 ${input.reasoningEffort}`
+    };
+  }
+
+  return {
+    currentModel: input.currentModel,
+    reasoningEffort: input.reasoningEffort,
+    nextSelector: null,
+    nextSelectorFlow: "standalone",
+    message: input.activeSelector === "model" ? "已取消模型选择" : "已取消推理强度选择"
+  };
 }
 
 function useTerminalDimensions(): TerminalDimensions {
@@ -86,6 +164,7 @@ export function App({ model, cwd, session, provider, tools, runTurn }: AppProps)
   const [slashMenuOpen, setSlashMenuOpen] = useState(false);
   const [slashMenuIndex, setSlashMenuIndex] = useState(0);
   const [activeSelector, setActiveSelector] = useState<SelectorKind | null>(null);
+  const [selectorFlow, setSelectorFlow] = useState<SelectorFlow>("standalone");
   const [selectorIndex, setSelectorIndex] = useState(0);
   const [busy, setBusy] = useState(false);
   const [manualCodePrompt, setManualCodePrompt] = useState<string | null>(null);
@@ -158,12 +237,13 @@ export function App({ model, cwd, session, provider, tools, runTurn }: AppProps)
   }, [selectedSlashIndex, slashCandidates]);
 
   const openSelector = useCallback(
-    (kind: SelectorKind) => {
+    (kind: SelectorKind, flow: SelectorFlow = "standalone") => {
       const options = kind === "model" ? modelOptions : reasoningOptions;
       setInput("");
       setSlashMenuOpen(false);
       setSlashMenuIndex(0);
       setActiveSelector(kind);
+      setSelectorFlow(flow);
       setSelectorIndex(getCurrentIndex(options));
     },
     [modelOptions, reasoningOptions]
@@ -171,6 +251,7 @@ export function App({ model, cwd, session, provider, tools, runTurn }: AppProps)
 
   const closeSelector = useCallback(() => {
     setActiveSelector(null);
+    setSelectorFlow("standalone");
     setSelectorIndex(0);
   }, []);
 
@@ -181,16 +262,40 @@ export function App({ model, cwd, session, provider, tools, runTurn }: AppProps)
       return;
     }
 
-    if (activeSelector === "model") {
-      setCurrentModel(selected.id);
-      commit({ id: nextId(), role: "system", text: `已切换模型: ${selected.id}` });
-    } else if (isReasoningEffort(selected.id)) {
-      setReasoningEffort(selected.id);
-      commit({ id: nextId(), role: "system", text: `已切换推理强度: ${selected.id}` });
+    const transition = applySelectorTransition({
+      activeSelector,
+      selectorFlow,
+      selectedId: selected.id,
+      currentModel,
+      reasoningEffort
+    });
+
+    setCurrentModel(transition.currentModel);
+    setReasoningEffort(transition.reasoningEffort);
+    if (transition.message) {
+      commit({ id: nextId(), role: "system", text: transition.message });
     }
 
-    closeSelector();
-  }, [activeSelector, closeSelector, commit, selectedSelectorIndex, selectorOptions]);
+    if (transition.nextSelector) {
+      const options = transition.nextSelector === "model" ? modelOptions : reasoningOptions;
+      setActiveSelector(transition.nextSelector);
+      setSelectorFlow(transition.nextSelectorFlow);
+      setSelectorIndex(getCurrentIndex(options));
+    } else {
+      closeSelector();
+    }
+  }, [
+    activeSelector,
+    closeSelector,
+    commit,
+    currentModel,
+    modelOptions,
+    reasoningEffort,
+    reasoningOptions,
+    selectedSelectorIndex,
+    selectorFlow,
+    selectorOptions
+  ]);
 
   useInput((value, key) => {
     if (key.ctrl && value === "c") {
@@ -208,6 +313,15 @@ export function App({ model, cwd, session, provider, tools, runTurn }: AppProps)
 
     if (activeSelector) {
       if (key.escape) {
+        const transition = cancelSelectorTransition({
+          activeSelector,
+          selectorFlow,
+          currentModel,
+          reasoningEffort
+        });
+        if (transition.message) {
+          commit({ id: nextId(), role: "system", text: transition.message });
+        }
         closeSelector();
         return;
       }
@@ -287,7 +401,7 @@ export function App({ model, cwd, session, provider, tools, runTurn }: AppProps)
       const slash = parseSlash(value);
       if (slash) {
         if (slash.command === "/model") {
-          openSelector("model");
+          openSelector("model", "modelEffortChain");
           return;
         }
 
