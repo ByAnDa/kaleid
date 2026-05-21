@@ -34,13 +34,14 @@ Reviewer: ByAnDa
 - 参数化：`{ id, baseURL, apiKey, defaultModel }`。DeepSeek 与 Kimi 各一个实例配置。
 - clean-room 自写 fetch+SSE（不引 openai SDK）。
 
-### 2. provider 注册 + 模型清单扩展（src/provider/models.ts）
-- 每个模型项带 `provider` 字段。新增 deepseek / kimi 的模型条目：
-  - `deepseek-v4-pro` [deepseek] / `deepseek-v4-flash` [deepseek]
-  - `kimi-for-coding` [kimi]
-  - （openai-codex 那批保持 spec-012 的列表）
-- 选择器列表项显示 provider 标签（如 pi 的 `gpt-5.5 [openai-codex]` / `deepseek-v4-pro [deepseek]` / `kimi-for-coding [kimi]`）。
+### 2. provider 注册 + 模型清单（各 provider 来源不同）
+- 每个模型项带 `provider` 字段。三类 provider 的模型来源**不一样**：
+  - **openai-codex**：无实时 list 接口 → 用 spec-012 的 bundled 清单（对齐 pi）。
+  - **deepseek**：✅ **OpenAI 兼容，有实时 `GET https://api.deepseek.com/models`**（Bearer key）→ **动态拉取可用模型**（如 deepseek-v4-flash / deepseek-v4-pro / deepseek-reasoner …），不硬编；拉取失败 fallback 到已知常量（deepseek-v4-pro / deepseek-v4-flash）。
+  - **kimi**（coding plan）：基本是**单一固定模型 `kimi-for-coding`**（官方统一 id，后端自动选最新）→ 列表就这一个（可选也尝试 /models，但通常就 kimi-for-coding）。
+- 选择器列表项显示 provider 标签（`gpt-5.5 [openai-codex]` / `deepseek-v4-pro [deepseek]` / `kimi-for-coding [kimi]`）。
 - DEFAULT 仍 `gpt-5.5`（openai-codex）。
+- **effort/reasoning**（回答 ByAnDa）：只有 **openai-codex** 有 reasoning_effort（low/med/high/xhigh）→ 才走 effort 链式。**DeepSeek 用单独的 `deepseek-reasoner` 模型做推理（无 effort 等级，深度靠 max_tokens）；Kimi 无 effort 参数** → 这两个 provider **跳过 effort 选择**（选完模型直接用）。
 
 ### 3. `/login` 改为 provider 登录选择器（3 选项，ByAnDa msg=56e4a227）
 - `/login` 不再直接走 OAuth，而是**弹出 provider 选择器**，共 **3 个选项**：
