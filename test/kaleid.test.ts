@@ -27,7 +27,13 @@ import {
 import { getInputBarHeight } from "../src/tui/components/InputBar.js";
 import { getMessageStyle } from "../src/tui/components/Message.js";
 import { formatToolCallLine } from "../src/tui/components/ToolCall.js";
-import { ALT_SCREEN_ENTER, ALT_SCREEN_EXIT, enterAlternateScreen } from "../src/tui/terminal.js";
+import {
+  ALT_SCREEN_ENTER,
+  ALT_SCREEN_EXIT,
+  INK_CLEAR_TERMINAL,
+  createDiffingTerminalOutput,
+  enterAlternateScreen
+} from "../src/tui/terminal.js";
 import type { Msg } from "../src/tui/types.js";
 
 function fakeJwt(accountId: string): string {
@@ -269,6 +275,45 @@ test("TUI fullscreen helpers enter and restore alternate screen for TTY output",
   });
   noopRestore();
   assert.deepEqual(nonTtyChunks, []);
+});
+
+test("TUI renderer patches changed rows without forwarding Ink full clears", () => {
+  const chunks: string[] = [];
+  const target = new Writable({
+    write(chunk, _encoding, callback) {
+      chunks.push(String(chunk));
+      callback();
+    }
+  }) as NodeJS.WriteStream;
+  Object.defineProperties(target, {
+    columns: { value: 40 },
+    isTTY: { value: true },
+    rows: { value: 4 }
+  });
+
+  const output = createDiffingTerminalOutput(target);
+  output.write(`${INK_CLEAR_TERMINAL}kaleid\nconversation\nstatus\ninput`);
+
+  const firstFrame = chunks.join("");
+  assert.doesNotMatch(firstFrame, /\x1b\[2J|\x1b\[3J/u);
+  assert.match(firstFrame, /kaleid/u);
+  assert.match(firstFrame, /conversation/u);
+  assert.match(firstFrame, /status/u);
+  assert.match(firstFrame, /input/u);
+
+  chunks.length = 0;
+  output.write(`${INK_CLEAR_TERMINAL}kaleid\nconversation changed\nstatus\ninput`);
+
+  const secondFrame = chunks.join("");
+  assert.doesNotMatch(secondFrame, /\x1b\[2J|\x1b\[3J/u);
+  assert.doesNotMatch(secondFrame, /kaleid/u);
+  assert.match(secondFrame, /\x1b\[2;1H\x1b\[2Kconversation changed/u);
+  assert.doesNotMatch(secondFrame, /status/u);
+  assert.doesNotMatch(secondFrame, /input/u);
+
+  chunks.length = 0;
+  output.write(`${INK_CLEAR_TERMINAL}kaleid\nconversation changed\nstatus\ninput`);
+  assert.equal(chunks.join(""), "");
 });
 
 test("TUI conversation keeps newest messages pinned to the bottom", () => {
