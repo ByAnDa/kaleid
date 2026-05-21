@@ -1,5 +1,7 @@
-import { chmod } from "node:fs/promises";
+import { chmod, rm } from "node:fs/promises";
 import { build } from "esbuild";
+
+await rm("dist", { recursive: true, force: true });
 
 await build({
   entryPoints: ["src/index.ts"],
@@ -11,8 +13,7 @@ await build({
   banner: {
     js: "#!/usr/bin/env node"
   },
-  external: ["ink", "react", "react/jsx-runtime", "ink-text-input", "ink-spinner"],
-  sourcemap: true
+  external: ["ink", "react", "react/jsx-runtime", "ink-text-input", "ink-spinner"]
 });
 
 await chmod("dist/index.js", 0o755);

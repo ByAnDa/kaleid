@@ -1,27 +1,43 @@
 # kaleid
 
-ByAnDa 自用的终端 Harness Agent（编码 agent）。
+kaleid is a terminal coding harness agent. It provides an OpenAI Codex OAuth
+provider, read/write/edit/bash tools, an agent loop, and a small Ink TUI.
 
-- 产品需求：`docs/kaleid-prd-v0.3.md`
-- 技术 spec：`specs/kaleid-v1-spec.md`
+## Install
 
-clean-room 自研（TypeScript + Node）。V1 = OpenAI Codex OAuth provider + read/write/edit/bash 四工具 + agent loop + 简单 TUI(ink) + npm 打包。
+```bash
+npm i -g kaleid
+```
+
+## Login
+
+```bash
+kaleid login
+```
+
+Use your own ChatGPT account to complete the browser OAuth flow. Credentials are
+stored only on your machine at `~/.kaleid/auth.json`.
 
 ## Usage
 
 ```bash
-npm install
-npm run build
-npm i -g .
-
-kaleid login
 kaleid
 kaleid "read package.json and summarize the scripts"
+kaleid -p "read package.json and summarize the scripts"
 ```
 
-Useful commands:
+The default model is `gpt-5.5`. Use `--model <id>` to override it for a run.
+
+## Disclaimer
+
+kaleid uses ChatGPT OAuth for OpenAI Codex access and is subject to the
+applicable OpenAI policies and account terms. It is not bundled with API keys,
+ChatGPT credentials, or subscription access.
+
+## Development
 
 ```bash
+npm install
 npm run typecheck
 npm test
 npm run build

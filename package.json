@@ -1,9 +1,28 @@
 {
   "name": "kaleid",
   "version": "0.1.0",
+  "description": "A terminal coding harness agent for OpenAI Codex OAuth.",
   "type": "module",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ByAnDa/kaleid.git"
+  },
+  "keywords": [
+    "agent",
+    "cli",
+    "terminal",
+    "harness",
+    "codex"
+  ],
   "bin": {
-    "kaleid": "./dist/index.js"
+    "kaleid": "dist/index.js"
+  },
+  "files": [
+    "dist/"
+  ],
+  "publishConfig": {
+    "access": "public"
   },
   "engines": {
     "node": ">=22"
@@ -13,6 +32,7 @@
     "dev": "tsx src/index.ts",
     "typecheck": "tsc --noEmit",
     "start": "node dist/index.js",
+    "prepublishOnly": "npm run build && npm run typecheck",
     "test": "tsx --test test/*.test.ts"
   },
   "dependencies": {
