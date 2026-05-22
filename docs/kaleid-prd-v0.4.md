@@ -170,6 +170,9 @@ Reviewer: ByAnDa
 ### spec-018 — resume project/label 筛选（待审核）
 - resume 选择器顶部加筛选栏 project（默认全部）+ label（默认全部）；选中进入对应列表选一个后返回、只显示该 project/label 的对话；两维 AND；选"全部"清除。详见 `kaleid spec-018 resume-filter.md`。
 
+### spec-020 — 设计重构 + Daylight/Spectrum 双主题 + token 系统 + 多行输入（待审核）
+- 按 Claude Design bundle 重做全屏 TUI：移植语义 token（surface/text/border/accent/role/status/tag/project）；双主题 Daylight(浅)/Spectrum(深)，**默认跟随终端**；**truecolor + 256/16 降级 fallback**；角色 gutter 色条 + 前缀 + tag/project 色块徽章；多行输入；`/theme` 切换；不实现 OS 窗口 chrome。设计 bundle 经 URL fetch、不入公开 repo。详见 `kaleid spec-020 design-restyle-themes.md`。
+
 ### spec-019 — 命令无参进入交互输入（待审核）
 - `/rename` 无参时进入交互输入态（预填当前名、可 项目/名称），不只靠后置参数；/project //chatlabel 已是 combobox（无参进交互）。三命令一致：无参进交互、带参直接设。详见 `kaleid spec-019 command-interactive-input.md`。
 
