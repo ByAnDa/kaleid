@@ -1,0 +1,556 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>kaleid · design tokens</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  html, body { margin: 0; padding: 0; min-height: 100%; }
+  body {
+    font-family: "JetBrains Mono", "IBM Plex Mono", "SF Mono", ui-monospace, monospace;
+    font-size: 13px;
+    line-height: 1.55;
+    transition: background .2s, color .2s;
+  }
+  * { box-sizing: border-box; }
+  pre, code { font-family: inherit; margin: 0; }
+  /* hide scrollbars on cards so they look clean */
+  .kal-card { scrollbar-width: thin; }
+</style>
+</head>
+<body>
+<div id="root"></div>
+
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+<script src="kaleid-tokens.js"></script>
+
+<script type="text/babel">
+const { useState, useMemo } = React;
+
+// ── CSS variable export helpers ─────────────────────────────────────────
+function flatten(obj, prefix = []) {
+  const out = [];
+  for (const [k, v] of Object.entries(obj)) {
+    const key = [...prefix, k];
+    if (v && typeof v === 'object' && !Array.isArray(v)) out.push(...flatten(v, key));
+    else out.push([key.join('-').replace(/_/g, '-'), v]);
+  }
+  return out;
+}
+function toCssVar(name) { return '--kal-' + name.replace(/\./g, '-').replace(/[^a-z0-9-]/gi, '-').toLowerCase(); }
+function toCssExport(mode) {
+  const t = window.KALEID_TOKENS;
+  const m = t.modes[mode];
+  const pairs = [
+    ...flatten(m.color, ['color']),
+    ...flatten(t.space, ['space']).map(([k, v]) => [k, v + 'px']),
+    ...flatten(t.radius, ['radius']).map(([k, v]) => [k, v + 'px']),
+    ...flatten(t.gutter, ['gutter']).map(([k, v]) => [k, v + 'px']),
+    ...flatten(t.font.size, ['font-size']).map(([k, v]) => [k, v + 'px']),
+    ...flatten(t.font.weight, ['font-weight']),
+    ...flatten(t.font.lineHeight, ['font-line-height']),
+    ...flatten(t.font.family, ['font-family']),
+  ];
+  return ':root[data-kal-mode="' + mode + '"] {\n' +
+    pairs.map(([k, v]) => '  ' + toCssVar(k) + ': ' + v + ';').join('\n') +
+    '\n}';
+}
+
+// ── Page-level theme (drives the catalog page's own look) ──────────────
+function usePageTheme(mode) {
+  return useMemo(() => window.themeFromTokens(mode), [mode]);
+}
+
+// ── Atoms ───────────────────────────────────────────────────────────────
+function Section({ theme, eyebrow, title, blurb, children }) {
+  return (
+    <section style={{ marginTop: 56 }}>
+      <div style={{ marginBottom: 22 }}>
+        <div style={{ color: theme.dim, fontSize: 11, letterSpacing: '0.12em', textTransform: 'uppercase', marginBottom: 6 }}>{eyebrow}</div>
+        <div style={{ display: 'flex', alignItems: 'baseline', gap: 16 }}>
+          <h2 style={{ margin: 0, fontSize: 22, fontWeight: 600, color: theme.fg, letterSpacing: '-0.01em' }}>{title}</h2>
+          {blurb && <div style={{ color: theme.dim, fontSize: 13 }}>{blurb}</div>}
+        </div>
+      </div>
+      {children}
+    </section>
+  );
+}
+
+function Grid({ cols = 4, gap = 14, children }) {
+  return (
+    <div style={{ display: 'grid', gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))`, gap }}>
+      {children}
+    </div>
+  );
+}
+
+function SwatchCard({ theme, color, tokenPath, description, height = 100, border = false }) {
+  return (
+    <div className="kal-card" style={{
+      borderRadius: 6,
+      overflow: 'hidden',
+      background: theme.panel,
+      border: '1px solid ' + theme.rule,
+    }}>
+      <div style={{
+        height,
+        background: color,
+        borderBottom: '1px solid ' + theme.rule,
+        ...(border ? { boxShadow: 'inset 0 0 0 1px ' + theme.faint } : {}),
+      }} />
+      <div style={{ padding: '10px 12px 12px' }}>
+        <div style={{ color: theme.fg, fontSize: 12.5 }}>{tokenPath}</div>
+        <div style={{ color: theme.dim, fontSize: 11.5, marginTop: 2, display: 'flex', justifyContent: 'space-between', gap: 8 }}>
+          <span style={{ color: theme.accent }}>{color}</span>
+          {description && <span style={{ color: theme.dim, textAlign: 'right' }}>{description}</span>}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ColorPairCard({ theme, fg, bg, tokenPath, sample = 'Aa' }) {
+  return (
+    <div className="kal-card" style={{
+      borderRadius: 6,
+      overflow: 'hidden',
+      background: theme.panel,
+      border: '1px solid ' + theme.rule,
+    }}>
+      <div style={{
+        height: 78,
+        background: bg,
+        color: fg,
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        fontSize: 26,
+        fontWeight: 500,
+      }}>{sample}</div>
+      <div style={{ padding: '10px 12px 12px' }}>
+        <div style={{ color: theme.fg, fontSize: 12.5 }}>{tokenPath}</div>
+        <div style={{ color: theme.dim, fontSize: 11.5, marginTop: 2, display: 'flex', gap: 10 }}>
+          <span><span style={{ color: theme.faint }}>fg </span><span style={{ color: theme.accent }}>{fg}</span></span>
+          <span><span style={{ color: theme.faint }}>bg </span><span style={{ color: theme.accent }}>{bg}</span></span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Sections ────────────────────────────────────────────────────────────
+function SurfaceSection({ theme, tokens }) {
+  const items = [
+    ['color.surface.canvas', tokens.surface.canvas, 'main app background'],
+    ['color.surface.panel',  tokens.surface.panel,  'header / inner panel'],
+    ['color.surface.raised', tokens.surface.raised, 'tool-call output panel'],
+    ['color.surface.chrome', tokens.surface.chrome, 'OS window tab bar'],
+  ];
+  return (
+    <Section theme={theme} eyebrow="01" title="Surface" blurb="background layers, from canvas up to chrome">
+      <Grid cols={4}>
+        {items.map(([p, c, d]) => <SwatchCard key={p} theme={theme} color={c} tokenPath={p} description={d} border />)}
+      </Grid>
+    </Section>
+  );
+}
+
+function TextSection({ theme, tokens }) {
+  const items = [
+    ['color.text.primary',   tokens.text.primary,   'body, headlines'],
+    ['color.text.secondary', tokens.text.secondary, 'section labels'],
+    ['color.text.muted',     tokens.text.muted,     'metadata, hints'],
+    ['color.text.subtle',    tokens.text.subtle,    'low-emphasis'],
+    ['color.text.faint',     tokens.text.faint,     'rules, placeholders'],
+    ['color.text.onChrome',  tokens.text.onChrome,  'tab bar text'],
+  ];
+  return (
+    <Section theme={theme} eyebrow="02" title="Text" blurb="six rungs of emphasis, paired with surface scale">
+      <Grid cols={3}>
+        {items.map(([p, c, d]) => (
+          <div key={p} className="kal-card" style={{
+            background: theme.panel, border: '1px solid ' + theme.rule,
+            borderRadius: 6, padding: '16px 18px',
+          }}>
+            <div style={{ color: c, fontSize: 22, fontWeight: 500, marginBottom: 6 }}>kaleid</div>
+            <div style={{ color: theme.fg, fontSize: 12.5 }}>{p}</div>
+            <div style={{ color: theme.dim, fontSize: 11.5, marginTop: 2, display: 'flex', justifyContent: 'space-between' }}>
+              <span style={{ color: theme.accent }}>{c}</span>
+              <span>{d}</span>
+            </div>
+          </div>
+        ))}
+      </Grid>
+    </Section>
+  );
+}
+
+function BorderAccentSection({ theme, tokens }) {
+  const items = [
+    ['color.border.strong',  tokens.border.strong],
+    ['color.border.default', tokens.border.default],
+    ['color.border.subtle',  tokens.border.subtle],
+    ['color.accent.default', tokens.accent.default],
+    ['color.accent.soft',    tokens.accent.soft],
+    ['color.accent.on',      tokens.accent.on],
+  ];
+  return (
+    <Section theme={theme} eyebrow="03" title="Border & accent">
+      <Grid cols={6}>
+        {items.map(([p, c]) => <SwatchCard key={p} theme={theme} color={c} tokenPath={p} height={70} border />)}
+      </Grid>
+    </Section>
+  );
+}
+
+function RoleSection({ theme, tokens, gutterStyle }) {
+  const roles = [
+    ['system',    'system'],
+    ['user',      'you   '],
+    ['assistant', 'kaleid'],
+    ['tool',      'tool  '],
+  ];
+  const isBlock = gutterStyle === 'block';
+  return (
+    <Section theme={theme} eyebrow="04" title="Role" blurb="conversation roles — fg paints text, gutter paints the left bar">
+      <div style={{
+        background: theme.bg,
+        border: '1px solid ' + theme.rule,
+        borderRadius: 6,
+        padding: '18px 20px',
+        display: 'flex',
+        flexDirection: 'column',
+        gap: 12,
+      }}>
+        {roles.map(([key, label]) => {
+          const r = tokens.role[key];
+          return (
+            <div key={key} style={{ display: 'flex', alignItems: 'stretch', gap: 0 }}>
+              <div style={{
+                width: isBlock ? 8 : 3,
+                background: isBlock ? r.gutter : 'transparent',
+                borderLeft: isBlock ? 'none' : '2px solid ' + r.gutter,
+                marginRight: 14,
+              }} />
+              <div style={{ width: 96, color: r.fg, fontWeight: 500 }}>{label}</div>
+              <div style={{ flex: 1, color: theme.fg }}>sample reply from <span style={{ color: r.fg }}>color.role.{key}</span> · let me read the file …</div>
+              <div style={{ color: theme.dim, fontSize: 11.5, textAlign: 'right', whiteSpace: 'nowrap' }}>
+                <span style={{ color: theme.faint }}>fg </span>{r.fg}
+                <span style={{ margin: '0 6px', color: theme.faint }}>·</span>
+                <span style={{ color: theme.faint }}>gutter </span>{r.gutter}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </Section>
+  );
+}
+
+function StatusSection({ theme, tokens }) {
+  const items = [
+    ['color.status.ok',   tokens.status.ok,   '✓ success'],
+    ['color.status.warn', tokens.status.warn, '⚠ warning'],
+    ['color.status.err',  tokens.status.err,  '✗ error'],
+    ['color.status.info', tokens.status.info, '· info'],
+  ];
+  return (
+    <Section theme={theme} eyebrow="05" title="Status">
+      <Grid cols={4}>
+        {items.map(([p, c, d]) => (
+          <div key={p} className="kal-card" style={{
+            background: theme.panel, border: '1px solid ' + theme.rule,
+            borderRadius: 6, padding: '14px 16px',
+          }}>
+            <div style={{ color: c, fontSize: 18, fontWeight: 500, marginBottom: 4 }}>{d}</div>
+            <div style={{ color: theme.fg, fontSize: 12.5 }}>{p}</div>
+            <div style={{ color: theme.accent, fontSize: 11.5, marginTop: 2 }}>{c}</div>
+          </div>
+        ))}
+      </Grid>
+    </Section>
+  );
+}
+
+function TagSection({ theme, tokens, kind, eyebrow, title, blurb, prefix }) {
+  const entries = Object.entries(tokens[kind]);
+  return (
+    <Section theme={theme} eyebrow={eyebrow} title={title} blurb={blurb}>
+      <Grid cols={4}>
+        {entries.map(([name, c]) => (
+          <div key={name} className="kal-card" style={{
+            background: theme.panel, border: '1px solid ' + theme.rule,
+            borderRadius: 6, padding: '14px 16px',
+          }}>
+            <div style={{ marginBottom: 10 }}>
+              <span style={{
+                background: c.bg, color: c.fg,
+                padding: '2px 9px', borderRadius: 3,
+                fontSize: 12, letterSpacing: '0.02em',
+              }}>{prefix}{name}</span>
+            </div>
+            <div style={{ color: theme.fg, fontSize: 12 }}>color.{kind}.{name}</div>
+            <div style={{ color: theme.dim, fontSize: 11.5, marginTop: 2, display: 'flex', justifyContent: 'space-between' }}>
+              <span><span style={{ color: theme.faint }}>fg </span>{c.fg}</span>
+              <span><span style={{ color: theme.faint }}>bg </span>{c.bg}</span>
+            </div>
+          </div>
+        ))}
+      </Grid>
+    </Section>
+  );
+}
+
+function SelectionSection({ theme, tokens }) {
+  const c = tokens.selection;
+  return (
+    <Section theme={theme} eyebrow="08" title="Selection" blurb="active row & text selection">
+      <div style={{
+        background: c.bg, color: c.fg,
+        border: '1px solid ' + theme.rule,
+        borderRadius: 6, padding: '18px 24px',
+        fontSize: 14,
+        display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+      }}>
+        <span><span style={{ opacity: 0.6 }}>›</span> selected session · pr-review</span>
+        <span style={{ fontSize: 11.5 }}>
+          <span style={{ opacity: 0.6 }}>fg </span>{c.fg}
+          <span style={{ margin: '0 8px', opacity: 0.4 }}>·</span>
+          <span style={{ opacity: 0.6 }}>bg </span>{c.bg}
+        </span>
+      </div>
+    </Section>
+  );
+}
+
+function TypeSection({ theme, tokens }) {
+  const sizes = Object.entries(tokens.font.size);
+  return (
+    <Section theme={theme} eyebrow="09" title="Type" blurb={tokens.font.family.mono.split(',')[0].replace(/"/g, '') + ' · monospace'}>
+      <div style={{
+        background: theme.panel, border: '1px solid ' + theme.rule,
+        borderRadius: 6, padding: '20px 24px',
+      }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+          {sizes.map(([k, v]) => (
+            <div key={k} style={{ display: 'flex', alignItems: 'baseline', gap: 18 }}>
+              <span style={{ color: theme.dim, width: 56, fontSize: 11.5 }}>font.size.{k}</span>
+              <span style={{ color: theme.faint, width: 44, fontSize: 11.5 }}>{v}px</span>
+              <span style={{ color: theme.fg, fontSize: v }}>kaleid · resumed session</span>
+            </div>
+          ))}
+        </div>
+        <hr style={{ border: 0, borderTop: '1px dashed ' + theme.faint, margin: '24px 0' }} />
+        <Grid cols={2} gap={20}>
+          <div>
+            <div style={{ color: theme.dim, fontSize: 11.5, marginBottom: 8 }}>font.weight</div>
+            {Object.entries(tokens.font.weight).map(([k, v]) => (
+              <div key={k} style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 0', borderBottom: '1px dashed ' + theme.faint }}>
+                <span style={{ color: theme.fg, fontWeight: v }}>kaleid · {k}</span>
+                <span style={{ color: theme.dim }}>{v}</span>
+              </div>
+            ))}
+          </div>
+          <div>
+            <div style={{ color: theme.dim, fontSize: 11.5, marginBottom: 8 }}>font.lineHeight</div>
+            {Object.entries(tokens.font.lineHeight).map(([k, v]) => (
+              <div key={k} style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 0', borderBottom: '1px dashed ' + theme.faint }}>
+                <span style={{ color: theme.fg }}>line.{k}</span>
+                <span style={{ color: theme.dim }}>{v}</span>
+              </div>
+            ))}
+          </div>
+        </Grid>
+      </div>
+    </Section>
+  );
+}
+
+function ScaleSection({ theme, tokens, eyebrow, title, entries, render, suffix = 'px' }) {
+  return (
+    <Section theme={theme} eyebrow={eyebrow} title={title}>
+      <div style={{
+        background: theme.panel, border: '1px solid ' + theme.rule,
+        borderRadius: 6, padding: '18px 22px',
+        display: 'flex', flexDirection: 'column', gap: 8,
+      }}>
+        {entries.map(([k, v]) => (
+          <div key={k} style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '4px 0', borderBottom: '1px dashed ' + theme.faint }}>
+            <span style={{ color: theme.dim, width: 100 }}>{title.toLowerCase()}.{k}</span>
+            <span style={{ color: theme.faint, width: 56 }}>{v}{suffix}</span>
+            <span style={{ flex: 1 }}>{render(v, theme)}</span>
+          </div>
+        ))}
+      </div>
+    </Section>
+  );
+}
+
+function CodeExport({ theme, mode }) {
+  const css = useMemo(() => toCssExport(mode), [mode]);
+  const [copied, setCopied] = useState(false);
+  const copy = () => {
+    navigator.clipboard.writeText(css).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1200);
+    });
+  };
+  return (
+    <Section theme={theme} eyebrow="12" title="CSS export" blurb="copy-paste for engineering handoff">
+      <div style={{
+        background: theme.panel, border: '1px solid ' + theme.rule, borderRadius: 6,
+        overflow: 'hidden',
+      }}>
+        <div style={{
+          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+          padding: '10px 14px', borderBottom: '1px solid ' + theme.rule, color: theme.dim, fontSize: 12,
+        }}>
+          <span>tokens.{mode}.css</span>
+          <button onClick={copy} style={{
+            background: 'transparent', border: '1px solid ' + theme.border, color: theme.fg,
+            padding: '3px 12px', borderRadius: 3, fontFamily: 'inherit', fontSize: 12, cursor: 'pointer',
+          }}>{copied ? '✓ copied' : 'copy'}</button>
+        </div>
+        <pre style={{
+          margin: 0, padding: '14px 18px', color: theme.fg, fontSize: 12.5, lineHeight: 1.55,
+          maxHeight: 420, overflow: 'auto', whiteSpace: 'pre',
+        }}>{css}</pre>
+      </div>
+    </Section>
+  );
+}
+
+// ── Header (title + mode toggle) ────────────────────────────────────────
+function Header({ theme, mode, setMode, tokens }) {
+  return (
+    <header style={{
+      paddingTop: 56, paddingBottom: 28,
+      borderBottom: '1px solid ' + theme.rule,
+      display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', gap: 24, flexWrap: 'wrap',
+    }}>
+      <div>
+        <div style={{ color: theme.dim, fontSize: 11.5, letterSpacing: '0.12em', textTransform: 'uppercase', marginBottom: 6 }}>kaleid · design system</div>
+        <h1 style={{
+          margin: 0, fontSize: 36, fontWeight: 600, color: theme.fg, letterSpacing: '-0.02em',
+          fontFamily: '"JetBrains Mono", monospace',
+        }}>design tokens<span style={{ color: theme.accent }}>.</span></h1>
+        <div style={{ color: theme.dim, marginTop: 8, maxWidth: 620 }}>
+          single source of truth for color, type, space, and role semantics across
+          the kaleid TUI. <a href="kaleid.html" style={{ color: theme.accent, textDecoration: 'underline' }}>← back to screens</a>
+        </div>
+      </div>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+        <span style={{ color: theme.dim, fontSize: 12 }}>mode</span>
+        <div style={{
+          display: 'flex', border: '1px solid ' + theme.border, borderRadius: 4,
+          overflow: 'hidden',
+        }}>
+          {['light','dark'].map(m => (
+            <button key={m} onClick={() => setMode(m)} style={{
+              background: m === mode ? theme.accent : 'transparent',
+              color:      m === mode ? tokens.accent.on : theme.fg,
+              border: 0, padding: '6px 16px',
+              fontFamily: 'inherit', fontSize: 12, cursor: 'pointer',
+              letterSpacing: '0.02em',
+              fontWeight: m === mode ? 500 : 400,
+            }}>{m === 'light' ? 'Daylight · light' : 'Spectrum · dark'}</button>
+          ))}
+        </div>
+      </div>
+    </header>
+  );
+}
+
+// ── Page ───────────────────────────────────────────────────────────────
+function TokensPage() {
+  const [mode, setMode] = useState('light');
+  const theme = usePageTheme(mode);
+  const tokens = window.KALEID_TOKENS.modes[mode].color;
+  const T = window.KALEID_TOKENS;
+  React.useEffect(() => {
+    document.body.style.background = theme.bg;
+    document.body.style.color = theme.fg;
+  }, [theme]);
+
+  return (
+    <div style={{
+      maxWidth: 1180, margin: '0 auto', padding: '0 36px 96px',
+      color: theme.fg,
+      transition: 'color .2s',
+    }}>
+      <Header theme={theme} mode={mode} setMode={setMode} tokens={tokens} />
+
+      <SurfaceSection theme={theme} tokens={tokens} />
+      <TextSection theme={theme} tokens={tokens} />
+      <BorderAccentSection theme={theme} tokens={tokens} />
+      <RoleSection theme={theme} tokens={tokens} gutterStyle={T.modes[mode].gutterStyle} />
+      <StatusSection theme={theme} tokens={tokens} />
+      <TagSection theme={theme} tokens={tokens} kind="tag"     eyebrow="06" title="Tag"     blurb="GitHub-style label badges · `#name`"           prefix="#" />
+      <TagSection theme={theme} tokens={tokens} kind="project" eyebrow="07" title="Project" blurb="project scope badges, displayed in status bar" prefix="" />
+      <SelectionSection theme={theme} tokens={tokens} />
+
+      <TypeSection theme={theme} tokens={T} />
+
+      <ScaleSection
+        theme={theme}
+        tokens={T}
+        eyebrow="10"
+        title="Space"
+        entries={Object.entries(T.space)}
+        render={(v, th) => (
+          <span style={{
+            display: 'inline-block', height: 10,
+            width: Math.max(2, v), background: th.accent, borderRadius: 1,
+          }} />
+        )}
+      />
+      <ScaleSection
+        theme={theme}
+        tokens={T}
+        eyebrow="11"
+        title="Radius"
+        entries={Object.entries(T.radius).filter(([k]) => k !== 'full').concat([['full', '9999']])}
+        render={(v, th) => (
+          <span style={{
+            display: 'inline-block', width: 40, height: 24,
+            background: th.accent, borderRadius: Math.min(20, +v) + 'px',
+          }} />
+        )}
+      />
+      <ScaleSection
+        theme={theme}
+        tokens={T}
+        eyebrow="11b"
+        title="Gutter"
+        entries={Object.entries(T.gutter)}
+        render={(v, th) => (
+          <span style={{
+            display: 'inline-block', width: Math.max(2, v), height: 22,
+            background: th.accent,
+          }} />
+        )}
+      />
+
+      <CodeExport theme={theme} mode={mode} />
+
+      <footer style={{
+        marginTop: 64, paddingTop: 24, borderTop: '1px solid ' + theme.rule,
+        color: theme.dim, fontSize: 12,
+        display: 'flex', justifyContent: 'space-between',
+      }}>
+        <span>kaleid · design tokens · v0.4.2</span>
+        <span>edit at <span style={{ color: theme.fg }}>kaleid-tokens.js</span></span>
+      </footer>
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById('root')).render(<TokensPage />);
+</script>
+</body>
+</html>
