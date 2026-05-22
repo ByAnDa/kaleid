@@ -44,7 +44,6 @@ import {
   type SlashCommandDefinition
 } from "./commands.js";
 import { Conversation } from "./components/Conversation.js";
-import { buildWelcomeIntroText } from "./components/Header.js";
 import { InputBar, getInputBarHeight } from "./components/InputBar.js";
 import {
   OptionSelector,
@@ -615,20 +614,13 @@ export function App({
     1,
     terminal.rows - selectorHeight - comboboxHeight - inputBarHeight
   );
-  const conversationMessages = useMemo<Msg[]>(
-    () => [
-      {
-        id: "__kaleid_intro__",
-        role: "system",
-        text: buildWelcomeIntroText(
-          currentModel,
-          providerSupportsReasoningEffort(currentProvider) ? reasoningEffort : null,
-          currentProvider
-        )
-      },
-      ...history
-    ],
-    [currentModel, currentProvider, history, reasoningEffort]
+  const welcomeBanner = useMemo(
+    () => ({
+      model: currentModel,
+      provider: currentProvider,
+      reasoningEffort: providerSupportsReasoningEffort(currentProvider) ? reasoningEffort : null
+    }),
+    [currentModel, currentProvider, reasoningEffort]
   );
 
   const commit = useCallback((msg: Msg) => {
@@ -1654,9 +1646,10 @@ export function App({
     <Box flexDirection="column" height={terminal.rows} width={terminal.columns}>
       <Conversation
         height={conversationHeight}
-        messages={conversationMessages}
+        messages={history}
         streaming={streaming}
         theme={theme}
+        welcome={welcomeBanner}
         width={terminal.columns}
       />
       {resumeSelectorVisible ? (

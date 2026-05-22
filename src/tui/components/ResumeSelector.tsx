@@ -93,6 +93,35 @@ function chipLimit(width: number, active: boolean): number {
   return 2;
 }
 
+export function getVisibleResumeFilterOptions(
+  options: readonly OptionSelectorItem[],
+  width: number,
+  active: boolean,
+  selectedIndex = -1
+): OptionSelectorItem[] {
+  const limit = Math.min(options.length, chipLimit(width, active));
+  if (limit >= options.length) {
+    return [...options];
+  }
+
+  const selected = active ? selectedIndex : options.findIndex((option) => option.current);
+  const keepIds = new Set<string>();
+  const add = (index: number): void => {
+    const option = options[index];
+    if (option && keepIds.size < limit) {
+      keepIds.add(option.id);
+    }
+  };
+
+  add(0);
+  add(selected);
+  for (let index = 0; index < options.length && keepIds.size < limit; index += 1) {
+    add(index);
+  }
+
+  return options.filter((option) => keepIds.has(option.id));
+}
+
 function FilterChip({
   active,
   current,
@@ -134,19 +163,20 @@ function FilterGroup({
 }): React.ReactElement {
   const isActiveFilter = activeFilter === kind;
   const isFocused = focus === kind || isActiveFilter;
-  const visibleOptions = options.slice(0, chipLimit(width, isActiveFilter));
+  const visibleOptions = getVisibleResumeFilterOptions(options, width, isActiveFilter, selectedIndex);
   const overflow = Math.max(0, options.length - visibleOptions.length);
+  const selectedOption = selectedIndex >= 0 ? options[selectedIndex] : null;
 
   return (
     <>
       <Text backgroundColor={theme.surface.canvas} color={isFocused ? theme.accent.default : theme.text.muted}>
         {kind}
       </Text>
-      {visibleOptions.map((option, index) => (
+      {visibleOptions.map((option) => (
         <React.Fragment key={option.id}>
           <Text backgroundColor={theme.surface.canvas}> </Text>
           <FilterChip
-            active={isActiveFilter && index === selectedIndex}
+            active={isActiveFilter && option.id === selectedOption?.id}
             current={option.current}
             label={formatResumeFilterChipLabel(option, kind)}
             theme={theme}
@@ -176,8 +206,9 @@ function FilterChoices({
   theme: ResolvedTuiTheme;
   width: number;
 }): React.ReactElement {
-  const visibleOptions = options.slice(0, chipLimit(width, true));
+  const visibleOptions = getVisibleResumeFilterOptions(options, width, true, selectedIndex);
   const overflow = Math.max(0, options.length - visibleOptions.length);
+  const selectedOption = selectedIndex >= 0 ? options[selectedIndex] : null;
 
   return (
     <Box flexDirection="row" paddingX={1} width={width}>
@@ -187,11 +218,11 @@ function FilterChoices({
       <Text backgroundColor={theme.surface.canvas} color={theme.accent.default}>
         {kind}
       </Text>
-      {visibleOptions.map((option, index) => (
+      {visibleOptions.map((option) => (
         <React.Fragment key={option.id}>
           <Text backgroundColor={theme.surface.canvas}> </Text>
           <FilterChip
-            active={index === selectedIndex}
+            active={option.id === selectedOption?.id}
             current={option.current}
             label={formatResumeFilterChipLabel(option, kind)}
             theme={theme}
@@ -324,7 +355,7 @@ export function ResumeSelector({
 
   return (
     <Box flexDirection="column" flexShrink={0} height={height} width={width}>
-      <Box flexDirection="row" paddingX={1} width={width}>
+      <Box flexDirection="row" height={1} overflow="hidden" paddingX={1} width={width}>
         <Text backgroundColor={theme.surface.canvas} color={filterFocus === "sessions" ? theme.accent.default : theme.text.muted}>
           resume session
         </Text>

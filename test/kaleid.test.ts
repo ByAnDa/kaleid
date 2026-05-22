@@ -86,10 +86,10 @@ import {
   getVisibleConversationEntries
 } from "../src/tui/components/Conversation.js";
 import { buildWelcomeIntroText, formatHeaderState, truncateHeaderState } from "../src/tui/components/Header.js";
-import { formatTokenStatus, getInputBarHeight, truncateConversationLabel } from "../src/tui/components/InputBar.js";
+import { formatTokenStatus, getInputBarHeight, getInputFooterGapWidth, truncateConversationLabel } from "../src/tui/components/InputBar.js";
 import { formatMessageRows, getMessageStyle } from "../src/tui/components/Message.js";
 import { ROLE_GUTTER_SYMBOL } from "../src/tui/components/RoleGutter.js";
-import { buildStatusLineLayout, formatStatusModel } from "../src/tui/components/StatusLine.js";
+import { STATUS_LINE_RIGHT_MARGIN, buildStatusLineLayout, formatStatusModel } from "../src/tui/components/StatusLine.js";
 import { getProjectTokenName, getTagTokenName } from "../src/tui/components/Badges.js";
 import {
   MULTILINE_INPUT_NEWLINE_HINT,
@@ -100,10 +100,16 @@ import {
 import { formatOptionComboboxLine, getOptionComboboxHeight } from "../src/tui/components/OptionCombobox.js";
 import { formatOptionSelectorLine, getOptionSelectorHeight } from "../src/tui/components/OptionSelector.js";
 import {
+  getVisibleResumeFilterOptions,
   formatResumeActivity,
   formatResumeFilterChipLabel,
   getResumeSelectorHeight
 } from "../src/tui/components/ResumeSelector.js";
+import {
+  WELCOME_BANNER_ROWS,
+  buildWelcomeBannerRows,
+  formatWelcomeBannerState
+} from "../src/tui/components/WelcomeBanner.js";
 import { formatToolCallLine } from "../src/tui/components/ToolCall.js";
 import {
   DEFAULT_RESOLVED_THEME,
@@ -553,6 +559,21 @@ test("TUI conversation keeps newest messages pinned to the bottom", () => {
     estimateConversationRows(buildConversationEntries([{ id: "wrapped", role: "user", text: "abcdef" }], null), 8),
     wrappedRows.length
   );
+
+  const welcome = { model: "gpt-5.5", reasoningEffort: "medium" as const };
+  const welcomeEntries = buildConversationEntries(messages.slice(0, 2), null, welcome);
+  assert.equal(welcomeEntries[0]?.kind, "welcome");
+  assert.equal(estimateConversationRows([welcomeEntries[0]!], 40), WELCOME_BANNER_ROWS);
+  assert.deepEqual(
+    getVisibleConversationEntries(welcomeEntries, WELCOME_BANNER_ROWS + 3, 40).map((entry) => entry.id),
+    ["__kaleid_intro__", "m1", "m2"]
+  );
+  assert.equal(
+    getVisibleConversationEntries(buildConversationEntries(messages, null, welcome), 5, 40).some(
+      (entry) => entry.kind === "welcome"
+    ),
+    false
+  );
 });
 
 test("TUI message labels and tool calls use distinct visual roles", () => {
@@ -784,10 +805,15 @@ test("TUI header and option selector format model and reasoning state", () => {
   assert.equal(formatHeaderState("gpt-5.5", "high"), "gpt-5.5 · high");
   assert.equal(formatHeaderState("kimi-for-coding", null, "kimi"), "kimi-for-coding [kimi] · -");
   assert.equal(truncateHeaderState("gpt-5.5-pro · medium", 12), "gpt-5.5-p...");
+  assert.equal(formatWelcomeBannerState({ model: "kimi-for-coding", provider: "kimi", reasoningEffort: null }), "kimi-for-coding [kimi] · -");
   const welcomeIntro = buildWelcomeIntroText("gpt-5.5", "high");
   assert.match(welcomeIntro, /^   ◆     kaleid v0\.0\.14 · gpt-5\.5 · high/u);
   assert.match(welcomeIntro, /◆◇◆/u);
   assert.equal(welcomeIntro.split("\n").length, 5);
+  const welcomeRows = buildWelcomeBannerRows({ model: "gpt-5.5", reasoningEffort: "high" }, 80);
+  assert.equal(welcomeRows.length, WELCOME_BANNER_ROWS);
+  assert.equal(welcomeRows[0]?.logo, "   ◆   ");
+  assert.match(welcomeRows[0]?.text ?? "", /kaleid v0\.0\.14 · gpt-5\.5 · high/u);
   assert.equal(getOptionSelectorHeight(5), 8);
   assert.equal(getResumeSelectorHeight(5), 8);
   assert.equal(getResumeSelectorHeight(5, true), 9);
@@ -808,6 +834,21 @@ test("TUI header and option selector format model and reasoning state", () => {
   );
   assert.equal(formatResumeFilterChipLabel({ id: CLEAR_RESUME_FILTER_OPTION_ID, display: "全部", current: true }, "project"), "all");
   assert.equal(formatResumeFilterChipLabel({ id: "review", current: false }, "label"), "#review");
+  const resumeFilterOptions = [
+    { id: CLEAR_RESUME_FILTER_OPTION_ID, display: "全部", current: false },
+    { id: "alpha", current: false },
+    { id: "beta", current: false },
+    { id: "gamma", current: false },
+    { id: "delta", current: true }
+  ];
+  assert.deepEqual(
+    getVisibleResumeFilterOptions(resumeFilterOptions, 40, false).map((option) => option.id),
+    [CLEAR_RESUME_FILTER_OPTION_ID, "delta"]
+  );
+  assert.deepEqual(
+    getVisibleResumeFilterOptions(resumeFilterOptions, 40, true, 4).map((option) => option.id),
+    [CLEAR_RESUME_FILTER_OPTION_ID, "alpha", "beta", "gamma", "delta"]
+  );
   assert.equal(
     formatResumeActivity({ messageCount: 12, updatedAt: "2026-05-22T12:00:00.000Z" }, Date.parse("2026-05-22T14:30:00.000Z")),
     "12 msgs · 2h"
@@ -1058,19 +1099,25 @@ test("TUI input footer reserves rows for status, slash menu, and OAuth paste mod
   assert.equal(busyStatusLayout.fallbackText, null);
   assert.equal(busyStatusLayout.name, "focused task");
   assert.equal(busyStatusLayout.modelState, "gpt-5.5 · medium");
+  const formattedTokenStatus = formatTokenStatus({
+    usedTokens: 12345,
+    contextWindow: 272000,
+    percent: 4.538,
+    warning: false,
+    source: "estimate",
+    model: "gpt-5.5",
+    reserveTokens: 16384,
+    keepRecentTokens: 20000,
+    updatedAt: "now"
+  });
+  assert.equal(formattedTokenStatus, "ctx 12.3K / 272K · 4.5%");
   assert.equal(
-    formatTokenStatus({
-      usedTokens: 12345,
-      contextWindow: 272000,
-      percent: 4.538,
-      warning: false,
-      source: "estimate",
-      model: "gpt-5.5",
-      reserveTokens: 16384,
-      keepRecentTokens: 20000,
-      updatedAt: "now"
-    }),
-    "ctx 12.3K / 272K · 4.5%"
+    1 +
+      textWidth(formattedTokenStatus) +
+      getInputFooterGapWidth(80, formattedTokenStatus) +
+      textWidth(MULTILINE_INPUT_NEWLINE_HINT) +
+      STATUS_LINE_RIGHT_MARGIN,
+    80
   );
   assert.equal(formatSessionDisplayName(null, "修复登录"), "修复登录");
   assert.equal(formatSessionDisplayName("kaleid", "修复登录"), "kaleid - 修复登录");

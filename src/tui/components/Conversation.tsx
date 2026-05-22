@@ -5,13 +5,22 @@ import { Message, formatMessageRows, getMessageStyle } from "./Message.js";
 import { formatToolCallLine } from "./ToolCall.js";
 import type { ResolvedTuiTheme } from "../theme/index.js";
 import { textWidth, wrapTextLine } from "./text-width.js";
+import { WELCOME_BANNER_ROWS, WelcomeBanner, type WelcomeBannerState } from "./WelcomeBanner.js";
 
 export type ConversationEntry =
+  | ({ id: "__kaleid_intro__"; kind: "welcome"; visibleRows?: number } & WelcomeBannerState)
   | { id: string; kind: "message"; msg: Msg }
   | { id: "streaming"; kind: "streaming"; text: string };
 
-export function buildConversationEntries(messages: Msg[], streaming: string | null): ConversationEntry[] {
-  const entries: ConversationEntry[] = messages.map((msg) => ({ id: msg.id, kind: "message", msg }));
+export function buildConversationEntries(
+  messages: Msg[],
+  streaming: string | null,
+  welcome?: WelcomeBannerState | null
+): ConversationEntry[] {
+  const entries: ConversationEntry[] = welcome
+    ? [{ id: "__kaleid_intro__", kind: "welcome", ...welcome }]
+    : [];
+  entries.push(...messages.map((msg) => ({ id: msg.id, kind: "message" as const, msg })));
   if (streaming) {
     entries.push({ id: "streaming", kind: "streaming", text: streaming });
   }
@@ -29,6 +38,10 @@ function estimateLabeledTextRows(label: string, text: string, width: number): nu
 }
 
 export function estimateConversationEntryRows(entry: ConversationEntry, width: number): number {
+  if (entry.kind === "welcome") {
+    return entry.visibleRows ?? WELCOME_BANNER_ROWS;
+  }
+
   if (entry.kind === "streaming") {
     return estimateLabeledTextRows(getMessageStyle("assistant").label, entry.text, width);
   }
@@ -77,6 +90,13 @@ function trimTextToRows(text: string, label: string, height: number, width: numb
 }
 
 function trimEntryToHeight(entry: ConversationEntry, height: number, width: number): ConversationEntry {
+  if (entry.kind === "welcome") {
+    return {
+      ...entry,
+      visibleRows: Math.max(1, Math.min(WELCOME_BANNER_ROWS, height))
+    };
+  }
+
   if (entry.kind === "streaming") {
     return {
       ...entry,
@@ -141,11 +161,12 @@ export interface ConversationProps {
   streaming: string | null;
   height: number;
   theme: ResolvedTuiTheme;
+  welcome?: WelcomeBannerState | null;
   width: number;
 }
 
-export function Conversation({ messages, streaming, height, theme, width }: ConversationProps): React.ReactElement {
-  const allEntries = buildConversationEntries(messages, streaming);
+export function Conversation({ messages, streaming, height, theme, welcome, width }: ConversationProps): React.ReactElement {
+  const allEntries = buildConversationEntries(messages, streaming, welcome);
   const entries = getVisibleConversationEntries(allEntries, height, width);
   const usedRows = estimateConversationRows(entries, width);
   const emptyRows = Math.max(0, height - usedRows);
@@ -158,7 +179,17 @@ export function Conversation({ messages, streaming, height, theme, width }: Conv
   ));
   const renderedEntries = entries.flatMap((entry, index) => {
     const element =
-      entry.kind === "streaming" ? (
+      entry.kind === "welcome" ? (
+        <WelcomeBanner
+          key={entry.id}
+          maxRows={entry.visibleRows}
+          model={entry.model}
+          provider={entry.provider}
+          reasoningEffort={entry.reasoningEffort}
+          theme={theme}
+          width={width}
+        />
+      ) : entry.kind === "streaming" ? (
         <Message key={entry.id} msg={{ id: entry.id, role: "assistant", text: entry.text }} theme={theme} width={width} />
       ) : (
         <Message key={entry.id} msg={entry.msg} theme={theme} width={width} />

@@ -8,6 +8,7 @@ import { textWidth, truncateConversationLabel, truncateEnd } from "./text-width.
 
 const STATUS_SEPARATOR = " · ";
 const MAX_STATUS_LABELS = 2;
+export const STATUS_LINE_RIGHT_MARGIN = 1;
 
 export interface StatusLineState {
   busyStatus: string | null;
@@ -125,19 +126,23 @@ export function StatusLine({
   theme,
   width
 }: StatusLineState & { theme: ResolvedTuiTheme; width: number }): React.ReactElement {
+  const rightMargin = width > 1 ? STATUS_LINE_RIGHT_MARGIN : 0;
+  const alignedWidth = Math.max(1, width - rightMargin);
   const layout = buildStatusLineLayout(
     { busyStatus: null, conversationName, labels, model, project, provider, reasoningEffort },
-    width
+    alignedWidth
   );
-  const fill = " ".repeat(Math.max(0, width - layout.width));
+  const fill = " ".repeat(Math.max(0, alignedWidth - layout.width));
+  const trailingFill = " ".repeat(rightMargin);
 
   if (layout.fallbackText) {
-    const fallbackFill = " ".repeat(Math.max(0, width - textWidth(layout.fallbackText)));
+    const fallbackFill = " ".repeat(Math.max(0, alignedWidth - textWidth(layout.fallbackText)));
     return (
       <Box width={width}>
         <Text backgroundColor={theme.surface.canvas} color={theme.text.secondary}>
           {fallbackFill}
           {layout.fallbackText}
+          {trailingFill}
         </Text>
       </Box>
     );
@@ -171,6 +176,7 @@ export function StatusLine({
       <Text backgroundColor={theme.surface.canvas} color={theme.text.secondary}>
         {layout.modelState}
       </Text>
+      <Text backgroundColor={theme.surface.canvas}>{trailingFill}</Text>
     </Box>
   );
 }

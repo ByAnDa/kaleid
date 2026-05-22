@@ -3,10 +3,17 @@ import { Box, Text } from "ink";
 import { providerLabel, type ProviderId, type ReasoningEffort } from "../../provider/models.js";
 import type { ResolvedTuiTheme } from "../theme/index.js";
 import { ProjectBadge, TagBadge } from "./Badges.js";
+import {
+  Kbd,
+  LOGO_LINES,
+  LogoLine,
+  VERSION_LABEL,
+  buildWelcomeIntroText,
+  formatWelcomeBannerState
+} from "./WelcomeBanner.js";
 
 export const HEADER_HEIGHT = 7;
-const VERSION_LABEL = "v0.0.14";
-export const LOGO_LINES = ["   ◆   ", "  ◆◇◆  ", " ◆◇◆◇◆ ", "  ◆◇◆  ", "   ◆   "] as const;
+export { LOGO_LINES, VERSION_LABEL, buildWelcomeIntroText };
 
 export interface HeaderProps {
   labels: readonly string[];
@@ -24,8 +31,7 @@ export function formatHeaderState(
   reasoningEffort: ReasoningEffort | null,
   provider?: ProviderId
 ): string {
-  const suffix = provider ? ` ${providerLabel(provider)}` : "";
-  return `${model}${suffix} · ${reasoningEffort ?? "-"}`;
+  return formatWelcomeBannerState({ model, provider, reasoningEffort });
 }
 
 export function truncateHeaderState(value: string, maxWidth: number): string {
@@ -40,50 +46,12 @@ export function truncateHeaderState(value: string, maxWidth: number): string {
   return `${value.slice(0, maxWidth - 3)}...`;
 }
 
-export function buildWelcomeIntroText(
-  model: string,
-  reasoningEffort: ReasoningEffort | null,
-  provider?: ProviderId
-): string {
-  return [
-    `${LOGO_LINES[0]}  kaleid ${VERSION_LABEL} · ${formatHeaderState(model, reasoningEffort, provider)}`,
-    `${LOGO_LINES[1]}  a kaleidoscopic terminal agent · multi-model · project & label scoped`,
-    `${LOGO_LINES[2]}  /help · /resume · /label · ^C interrupt · ^D exit`,
-    `${LOGO_LINES[3]}  terminal coding harness`,
-    LOGO_LINES[4]
-  ].join("\n");
-}
-
 function textLength(value: string): number {
   return Array.from(value).length;
 }
 
 function fill(width: number): string {
   return " ".repeat(Math.max(0, width));
-}
-
-function LogoLine({ line, theme }: { line: string; theme: ResolvedTuiTheme }): React.ReactElement {
-  return (
-    <Text backgroundColor={theme.surface.canvas}>
-      {Array.from(line).map((char, index) => (
-        <Text
-          key={`${char}-${index}`}
-          backgroundColor={theme.surface.canvas}
-          color={char === "◇" ? theme.text.muted : theme.accent.default}
-        >
-          {char}
-        </Text>
-      ))}
-    </Text>
-  );
-}
-
-function Kbd({ children, theme }: { children: string; theme: ResolvedTuiTheme }): React.ReactElement {
-  return (
-    <Text backgroundColor={theme.text.faint} color={theme.text.primary}>
-      {` ${children} `}
-    </Text>
-  );
 }
 
 export function Header({

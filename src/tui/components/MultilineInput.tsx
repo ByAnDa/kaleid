@@ -142,14 +142,15 @@ export function MultilineInput({
   const [cursor, setCursor] = useState(value.length);
   const displayValue = useMemo(() => maskValue(value, mask), [mask, value]);
   const cursorValue = insertCursor(displayValue, clamp(cursor, 0, displayValue.length));
-  const valueWidth = Math.max(1, width - prompt.length);
+  const promptWidth = textWidth(prompt);
+  const valueWidth = Math.max(1, width - promptWidth - 1);
   const wrappedLines = wrapDisplayValue(cursorValue, valueWidth);
   const hiddenRows = Math.max(0, wrappedLines.length - MAX_MULTILINE_INPUT_ROWS);
   const visibleLines = wrappedLines.slice(-MAX_MULTILINE_INPUT_ROWS);
   if (hiddenRows > 0) {
     visibleLines[0] = `... ${hiddenRows} earlier row${hiddenRows === 1 ? "" : "s"}`;
   }
-  const promptIndent = " ".repeat(prompt.length);
+  const promptIndent = " ".repeat(promptWidth);
 
   useEffect(() => {
     setCursor((current) => clamp(current, 0, value.length));
@@ -222,7 +223,7 @@ export function MultilineInput({
         return (
           <Text
             key={index}
-            backgroundColor={theme.surface.panel}
+            backgroundColor={theme.surface.canvas}
             color={hiddenRows > 0 && index === 0 ? theme.text.faint : theme.text.primary}
           >
             <Text bold color={promptColor}>
