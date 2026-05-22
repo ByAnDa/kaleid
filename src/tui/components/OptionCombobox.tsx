@@ -1,6 +1,7 @@
 import React from "react";
 import { Box, Text } from "ink";
 import TextInput from "ink-text-input";
+import type { ResolvedTuiTheme } from "../theme/index.js";
 
 export interface OptionComboboxItem {
   id: string;
@@ -13,6 +14,7 @@ export interface OptionComboboxProps {
   input: string;
   options: OptionComboboxItem[];
   selectedIndex: number;
+  theme: ResolvedTuiTheme;
   width: number;
   onChange: (value: string) => void;
   onSubmit: (value: string) => void;
@@ -40,6 +42,7 @@ export function OptionCombobox({
   input,
   options,
   selectedIndex,
+  theme,
   width,
   onChange,
   onSubmit
@@ -47,26 +50,33 @@ export function OptionCombobox({
   const typing = isOptionComboboxTyping(input);
 
   return (
-    <Box borderStyle="round" borderColor="cyan" flexDirection="column" flexShrink={0} paddingX={1} width={width}>
-      <Text bold color="cyan">
+    <Box
+      borderStyle="single"
+      borderColor={theme.border.default}
+      flexDirection="column"
+      flexShrink={0}
+      paddingX={1}
+      width={width}
+    >
+      <Text bold color={theme.accent.primary}>
         {title}
       </Text>
       <Box flexDirection="row">
-        <Text bold color="green">
+        <Text bold color={theme.accent.primary}>
           ›{" "}
         </Text>
         <TextInput value={input} onChange={onChange} onSubmit={onSubmit} />
       </Box>
       {!typing && options.length === 0 ? (
-        <Text color="yellow">No options</Text>
+        <Text color={theme.status.warn}>No options</Text>
       ) : !typing ? (
         options.map((option, index) => {
           const selected = index === selectedIndex;
           return (
             <Text
               key={option.id}
-              backgroundColor={selected ? "green" : undefined}
-              color={selected ? "black" : option.current ? "white" : "gray"}
+              backgroundColor={selected ? theme.selection.bg : undefined}
+              color={selected ? theme.selection.fg : option.current ? theme.text.primary : theme.text.muted}
             >
               {formatOptionComboboxLine(option, selected)}
             </Text>

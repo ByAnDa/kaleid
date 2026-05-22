@@ -1,5 +1,6 @@
 import React from "react";
-import { Text } from "ink";
+import { Box, Text } from "ink";
+import type { ResolvedTuiTheme } from "../theme/index.js";
 
 export interface ToolCallView {
   name: string;
@@ -44,13 +45,27 @@ export function formatToolCallLine(tool: ToolCallView, width = 80): string {
   return `${parts.invocation} ${parts.status} ${parts.summary}`;
 }
 
-export function ToolCall({ tool, width }: { tool: ToolCallView; width?: number }): React.ReactElement {
+export function ToolCall({
+  theme,
+  tool,
+  width
+}: {
+  theme: ResolvedTuiTheme;
+  tool: ToolCallView;
+  width?: number;
+}): React.ReactElement {
   const parts = formatToolCallParts(tool, width);
   return (
-    <Text>
-      <Text color="magenta">{parts.invocation}</Text>{" "}
-      <Text color={tool.isError ? "red" : "green"}>{parts.status}</Text>{" "}
-      <Text color={tool.isError ? "red" : "gray"}>{parts.summary}</Text>
-    </Text>
+    <Box flexDirection="row" width={width}>
+      <Text backgroundColor={theme.role.tool.gutter}>  </Text>
+      <Text> </Text>
+      <Box flexGrow={1} paddingX={1}>
+        <Text backgroundColor={theme.surface.raised}>
+          <Text color={theme.role.tool.fg}>{parts.invocation}</Text>{" "}
+          <Text color={tool.isError ? theme.status.err : theme.status.ok}>{parts.status}</Text>{" "}
+          <Text color={tool.isError ? theme.status.err : theme.text.muted}>{parts.summary}</Text>
+        </Text>
+      </Box>
+    </Box>
   );
 }

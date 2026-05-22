@@ -1,0 +1,174 @@
+import type { BadgeColorTokens, ResolvedTuiTheme, TerminalColorLevel, ThemeColorTokens, TuiTheme } from "./tokens.js";
+
+const ANSI16_COLORS: Record<string, string> = {
+  black: "#000000",
+  red: "#cd3131",
+  green: "#0dbc79",
+  yellow: "#e5e510",
+  blue: "#2472c8",
+  magenta: "#bc3fbc",
+  cyan: "#11a8cd",
+  white: "#e5e5e5",
+  gray: "#666666"
+};
+
+const ANSI256_LEVELS = [0, 95, 135, 175, 215, 255] as const;
+
+function hexToRgb(hex: string): [number, number, number] | null {
+  const match = /^#?([0-9a-f]{6})$/iu.exec(hex);
+  if (!match) {
+    return null;
+  }
+
+  const value = match[1] ?? "";
+  return [
+    Number.parseInt(value.slice(0, 2), 16),
+    Number.parseInt(value.slice(2, 4), 16),
+    Number.parseInt(value.slice(4, 6), 16)
+  ];
+}
+
+function distance(a: [number, number, number], b: [number, number, number]): number {
+  return (a[0] - b[0]) ** 2 + (a[1] - b[1]) ** 2 + (a[2] - b[2]) ** 2;
+}
+
+export function nearestAnsiColor(hex: string): string {
+  const rgb = hexToRgb(hex);
+  if (!rgb) {
+    return hex;
+  }
+
+  let bestName = "white";
+  let bestDistance = Number.POSITIVE_INFINITY;
+  for (const [name, fallbackHex] of Object.entries(ANSI16_COLORS)) {
+    const fallbackRgb = hexToRgb(fallbackHex);
+    if (!fallbackRgb) {
+      continue;
+    }
+
+    const nextDistance = distance(rgb, fallbackRgb);
+    if (nextDistance < bestDistance) {
+      bestName = name;
+      bestDistance = nextDistance;
+    }
+  }
+
+  return bestName;
+}
+
+function ansi256PaletteColor(index: number): [number, number, number] {
+  if (index < 16) {
+    return hexToRgb(Object.values(ANSI16_COLORS)[index] ?? "#ffffff") ?? [255, 255, 255];
+  }
+
+  if (index < 232) {
+    const cubeIndex = index - 16;
+    const red = ANSI256_LEVELS[Math.floor(cubeIndex / 36)] ?? 0;
+    const green = ANSI256_LEVELS[Math.floor((cubeIndex % 36) / 6)] ?? 0;
+    const blue = ANSI256_LEVELS[cubeIndex % 6] ?? 0;
+    return [red, green, blue];
+  }
+
+  const gray = 8 + (index - 232) * 10;
+  return [gray, gray, gray];
+}
+
+export function nearestAnsi256Color(hex: string): string {
+  const rgb = hexToRgb(hex);
+  if (!rgb) {
+    return hex;
+  }
+
+  let bestIndex = 15;
+  let bestDistance = Number.POSITIVE_INFINITY;
+  for (let index = 0; index <= 255; index += 1) {
+    const nextDistance = distance(rgb, ansi256PaletteColor(index));
+    if (nextDistance < bestDistance) {
+      bestIndex = index;
+      bestDistance = nextDistance;
+    }
+  }
+
+  return `ansi256(${bestIndex})`;
+}
+
+function mapBadgeColors(badge: BadgeColorTokens, colorLevel: TerminalColorLevel): BadgeColorTokens {
+  return {
+    bg: resolveThemeColor(badge.bg, colorLevel),
+    fg: resolveThemeColor(badge.fg, colorLevel)
+  };
+}
+
+export function resolveThemeColor(hex: string, colorLevel: TerminalColorLevel): string {
+  if (colorLevel === "truecolor") {
+    return hex;
+  }
+
+  if (colorLevel === "ansi256") {
+    return nearestAnsi256Color(hex);
+  }
+
+  return nearestAnsiColor(hex);
+}
+
+export function resolveTheme(theme: TuiTheme, colorLevel: TerminalColorLevel, mode: ResolvedTuiTheme["mode"]): ResolvedTuiTheme {
+  const map = (hex: string) => resolveThemeColor(hex, colorLevel);
+  const tokens: ThemeColorTokens = {
+    surface: {
+      canvas: map(theme.surface.canvas),
+      panel: map(theme.surface.panel),
+      raised: map(theme.surface.raised),
+      chrome: map(theme.surface.chrome)
+    },
+    text: {
+      primary: map(theme.text.primary),
+      secondary: map(theme.text.secondary),
+      muted: map(theme.text.muted),
+      subtle: map(theme.text.subtle),
+      faint: map(theme.text.faint),
+      onChrome: map(theme.text.onChrome)
+    },
+    border: {
+      strong: map(theme.border.strong),
+      default: map(theme.border.default),
+      subtle: map(theme.border.subtle)
+    },
+    accent: {
+      primary: map(theme.accent.primary),
+      secondary: map(theme.accent.secondary),
+      quiet: map(theme.accent.quiet)
+    },
+    role: {
+      system: { fg: map(theme.role.system.fg), gutter: map(theme.role.system.gutter) },
+      user: { fg: map(theme.role.user.fg), gutter: map(theme.role.user.gutter) },
+      assistant: { fg: map(theme.role.assistant.fg), gutter: map(theme.role.assistant.gutter) },
+      tool: { fg: map(theme.role.tool.fg), gutter: map(theme.role.tool.gutter) },
+      error: { fg: map(theme.role.error.fg), gutter: map(theme.role.error.gutter) }
+    },
+    status: {
+      ok: map(theme.status.ok),
+      warn: map(theme.status.warn),
+      err: map(theme.status.err),
+      info: map(theme.status.info)
+    },
+    tag: {
+      review: mapBadgeColors(theme.tag.review, colorLevel),
+      wip: mapBadgeColors(theme.tag.wip, colorLevel),
+      design: mapBadgeColors(theme.tag.design, colorLevel),
+      infra: mapBadgeColors(theme.tag.infra, colorLevel),
+      planning: mapBadgeColors(theme.tag.planning, colorLevel),
+      refactor: mapBadgeColors(theme.tag.refactor, colorLevel),
+      docs: mapBadgeColors(theme.tag.docs, colorLevel),
+      inbox: mapBadgeColors(theme.tag.inbox, colorLevel)
+    },
+    project: mapBadgeColors(theme.project, colorLevel),
+    selection: mapBadgeColors(theme.selection, colorLevel)
+  };
+
+  return {
+    ...tokens,
+    name: theme.name,
+    mode,
+    colorLevel
+  };
+}

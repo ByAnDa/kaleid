@@ -58,6 +58,7 @@ export const SLASH_COMMANDS: SlashCommandDefinition[] = [
   { command: "/rename", description: "Rename the current conversation" },
   { command: "/project", description: "Set the current conversation project" },
   { command: "/chatlabel", description: "Add or remove conversation labels" },
+  { command: "/theme", description: "Switch TUI theme" },
   { command: "/exit", description: "Exit kaleid" },
   { command: "/help", description: "Show available slash commands" }
 ];
@@ -166,7 +167,8 @@ export async function runSlashCommand(
     parsed.command === "/resume" ||
     parsed.command === "/rename" ||
     parsed.command === "/project" ||
-    parsed.command === "/chatlabel"
+    parsed.command === "/chatlabel" ||
+    parsed.command === "/theme"
   ) {
     return {
       action: "continue",

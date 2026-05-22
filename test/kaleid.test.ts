@@ -87,9 +87,19 @@ import {
 import { formatHeaderState, truncateHeaderState } from "../src/tui/components/Header.js";
 import { formatTokenStatus, getInputBarHeight, truncateConversationLabel } from "../src/tui/components/InputBar.js";
 import { getMessageStyle } from "../src/tui/components/Message.js";
+import { getMultilineInputRows, shouldInsertInputNewline } from "../src/tui/components/MultilineInput.js";
 import { formatOptionComboboxLine, getOptionComboboxHeight } from "../src/tui/components/OptionCombobox.js";
 import { formatOptionSelectorLine, getOptionSelectorHeight } from "../src/tui/components/OptionSelector.js";
 import { formatToolCallLine } from "../src/tui/components/ToolCall.js";
+import {
+  DEFAULT_RESOLVED_THEME,
+  detectTerminalAppearance,
+  detectTerminalColorLevel,
+  getResolvedTheme,
+  nearestAnsi256Color,
+  nearestAnsiColor,
+  themeNameForMode
+} from "../src/tui/theme/index.js";
 import {
   ALT_SCREEN_ENTER,
   ALT_SCREEN_EXIT,
@@ -303,6 +313,7 @@ test("slash command parser and dispatcher handle help, unknown, logout, and logi
     "/rename",
     "/project",
     "/chatlabel",
+    "/theme",
     "/exit",
     "/help"
   ]);
@@ -326,6 +337,7 @@ test("slash command parser and dispatcher handle help, unknown, logout, and logi
   assert.match(help.messages[0] ?? "", /\/rename/u);
   assert.match(help.messages[0] ?? "", /\/project/u);
   assert.match(help.messages[0] ?? "", /\/chatlabel/u);
+  assert.match(help.messages[0] ?? "", /\/theme/u);
   assert.match(help.messages[0] ?? "", /\/exit/u);
   assert.match(help.messages[0] ?? "", /\/help/u);
   assert.deepEqual(parseRenameCommandArgs(["我的重构任务"]), { name: "我的重构任务" });
@@ -514,9 +526,24 @@ test("TUI conversation keeps newest messages pinned to the bottom", () => {
 });
 
 test("TUI message labels and tool calls use distinct visual roles", () => {
-  assert.deepEqual(getMessageStyle("user"), { label: "you ›", color: "green", bold: true });
-  assert.deepEqual(getMessageStyle("assistant"), { label: "kaleid ›", color: "cyan" });
-  assert.deepEqual(getMessageStyle("system"), { label: "system ›", color: "gray", dimColor: true });
+  const theme = DEFAULT_RESOLVED_THEME;
+  assert.deepEqual(getMessageStyle("user"), {
+    label: "you ›",
+    color: theme.role.user.fg,
+    gutter: theme.role.user.gutter,
+    bold: true
+  });
+  assert.deepEqual(getMessageStyle("assistant"), {
+    label: "kaleid ›",
+    color: theme.role.assistant.fg,
+    gutter: theme.role.assistant.gutter
+  });
+  assert.deepEqual(getMessageStyle("system"), {
+    label: "system ›",
+    color: theme.role.system.fg,
+    gutter: theme.role.system.gutter,
+    dimColor: true
+  });
 
   const success = formatToolCallLine(
     { name: "bash", args: { command: "npm test" }, resultSummary: "passed" },
@@ -530,6 +557,29 @@ test("TUI message labels and tool calls use distinct visual roles", () => {
     80
   );
   assert.match(failure, /✘ not found/u);
+});
+
+test("TUI themes follow terminal appearance and fall back for low-color terminals", () => {
+  assert.equal(detectTerminalAppearance({ COLORFGBG: "0;15" } as NodeJS.ProcessEnv), "light");
+  assert.equal(detectTerminalAppearance({ COLORFGBG: "15;0" } as NodeJS.ProcessEnv), "dark");
+  assert.equal(detectTerminalColorLevel({ COLORTERM: "truecolor" } as NodeJS.ProcessEnv), "truecolor");
+  assert.equal(detectTerminalColorLevel({ TERM: "xterm-256color" } as NodeJS.ProcessEnv), "ansi256");
+  assert.equal(themeNameForMode("system", "light"), "daylight");
+  assert.equal(themeNameForMode("system", "dark"), "spectrum");
+  assert.equal(nearestAnsiColor("#000000"), "black");
+  assert.match(nearestAnsi256Color("#000000"), /^ansi256\(\d+\)$/u);
+
+  const daylight = getResolvedTheme("system", "light", "truecolor");
+  assert.equal(daylight.name, "daylight");
+  assert.match(daylight.role.user.fg, /^#/u);
+
+  const ansi256 = getResolvedTheme("spectrum", "dark", "ansi256");
+  assert.match(ansi256.role.user.fg, /^ansi256\(\d+\)$/u);
+
+  const lowColor = getResolvedTheme("spectrum", "dark", "ansi16");
+  assert.equal(lowColor.name, "spectrum");
+  assert.doesNotMatch(lowColor.role.user.fg, /^#/u);
+  assert.doesNotMatch(lowColor.tag.docs.bg, /^#/u);
 });
 
 test("TUI header and option selector format model and reasoning state", () => {
@@ -743,6 +793,17 @@ test("TUI input footer reserves rows for status, slash menu, and OAuth paste mod
     4
   );
   assert.equal(
+    getInputBarHeight({
+      input: "line one\nline two",
+      inputWidth: 80,
+      manualCodePrompt: null,
+      slashCommandCount: 0,
+      slashMenuVisible: false,
+      status: null
+    }),
+    5
+  );
+  assert.equal(
     getInputBarHeight({ manualCodePrompt: null, slashCommandCount: 4, slashMenuVisible: true, status: null }),
     8
   );
@@ -779,6 +840,11 @@ test("TUI input footer reserves rows for status, slash menu, and OAuth paste mod
   );
   assert.equal(truncateConversationLabel("kaleid - 修复登录", 12), "kaleid -...");
   assert.equal(truncateConversationLabel("abcdef", 2), "..");
+  assert.equal(getMultilineInputRows("one\ntwo", 80), 2);
+  assert.equal(getMultilineInputRows("x\nx\nx\nx\nx\nx\nx", 80), 6);
+  assert.equal(shouldInsertInputNewline("j", { ctrl: true }), true);
+  assert.equal(shouldInsertInputNewline("", { meta: true, return: true }), true);
+  assert.equal(shouldInsertInputNewline("", { return: true }), false);
 });
 
 test("OAuth helpers decode account ids and refresh via mocked token endpoint", async () => {

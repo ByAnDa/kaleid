@@ -1,12 +1,15 @@
 import React from "react";
 import { Box, Text } from "ink";
-import TextInput from "ink-text-input";
 import type { SlashCommandDefinition } from "../commands.js";
 import { SlashMenu } from "./SlashMenu.js";
 import { StatusLine } from "./StatusLine.js";
 import type { TokenState } from "../../loop/session.js";
+import type { ResolvedTuiTheme } from "../theme/index.js";
+import { MultilineInput, getMultilineInputRows } from "./MultilineInput.js";
 
 export interface InputBarLayoutState {
+  input?: string;
+  inputWidth?: number;
   manualCodePrompt: string | null;
   slashCommandCount: number;
   slashMenuVisible: boolean;
@@ -17,7 +20,8 @@ export function getInputBarHeight(state: InputBarLayoutState): number {
   const statusRows = state.status ? 1 : 0;
   const manualPromptRows = state.manualCodePrompt ? 1 : 0;
   const slashMenuRows = state.slashMenuVisible ? Math.max(1, state.slashCommandCount) : 0;
-  return 4 + statusRows + manualPromptRows + slashMenuRows;
+  const inputRows = getMultilineInputRows(state.input ?? "", state.inputWidth ?? 80);
+  return 3 + inputRows + statusRows + manualPromptRows + slashMenuRows;
 }
 
 export interface InputBarProps extends InputBarLayoutState {
@@ -31,6 +35,7 @@ export interface InputBarProps extends InputBarLayoutState {
   onSubmit?: (value: string) => void;
   selectedSlashIndex: number;
   slashCandidates: SlashCommandDefinition[];
+  theme: ResolvedTuiTheme;
   tokenState: TokenState;
   width: number;
 }
@@ -124,47 +129,78 @@ export function InputBar({
   onSubmit,
   selectedSlashIndex,
   slashCandidates,
+  theme,
   tokenState,
   slashMenuVisible,
   status,
   width
 }: InputBarProps): React.ReactElement {
   const prompt = inputPrompt ?? (manualCodePrompt ? "input> " : "› ");
-  const borderColor = inputPrompt ? "cyan" : manualCodePrompt ? "yellow" : disabled ? "gray" : "green";
-  const promptColor = inputPrompt ? "cyan" : manualCodePrompt ? "yellow" : "green";
+  const borderColor = inputPrompt
+    ? theme.accent.secondary
+    : manualCodePrompt
+      ? theme.status.warn
+      : disabled
+        ? theme.border.subtle
+        : theme.accent.primary;
+  const promptColor = inputPrompt ? theme.accent.secondary : manualCodePrompt ? theme.status.warn : theme.accent.primary;
   const labelMaxWidth = Math.max(0, Math.min(48, width - 12));
   const label = truncateConversationLabel(conversationLabel, labelMaxWidth);
+  const inputRows = getMultilineInputRows(input, Math.max(1, width - prompt.length - label.length - 8));
+  const inputWidth = Math.max(1, width - label.length - 6);
 
   return (
     <Box flexDirection="column" flexShrink={0} width={width}>
-      {status ? <StatusLine status={status} /> : null}
+      {status ? <StatusLine status={status} theme={theme} /> : null}
       {manualCodePrompt ? (
         <Box paddingX={1}>
-          <Text color="yellow">{manualCodePrompt}</Text>
+          <Text color={theme.status.warn}>{manualCodePrompt}</Text>
         </Box>
       ) : null}
-      {slashMenuVisible ? <SlashMenu commands={slashCandidates} selectedIndex={selectedSlashIndex} /> : null}
-      <Box borderStyle="round" borderColor={borderColor} height={3} paddingX={1} width={width}>
+      {slashMenuVisible ? (
+        <SlashMenu commands={slashCandidates} selectedIndex={selectedSlashIndex} theme={theme} />
+      ) : null}
+      <Box
+        borderStyle="single"
+        borderColor={borderColor}
+        height={inputRows + 2}
+        paddingX={1}
+        width={width}
+      >
         <Box flexDirection="row" width="100%">
-          <Box flexGrow={1} minWidth={0}>
-            <Text bold color={promptColor}>
-              {prompt}
-            </Text>
+          <Box flexGrow={1} minWidth={0} width={inputWidth}>
             {disabled ? (
-              <Text color="gray">{disabledLabel ?? status ?? "working..."}</Text>
+              <Text color={theme.text.muted}>
+                <Text bold color={promptColor}>
+                  {prompt}
+                </Text>
+                {disabledLabel ?? status ?? "working..."}
+              </Text>
             ) : (
-              <TextInput value={input} mask={inputMask} onChange={onChange} onSubmit={onSubmit} />
+              <MultilineInput
+                disabled={disabled}
+                mask={inputMask}
+                onChange={onChange}
+                onSubmit={onSubmit}
+                prompt={prompt}
+                promptColor={promptColor}
+                theme={theme}
+                value={input}
+                width={inputWidth}
+              />
             )}
           </Box>
           {label ? (
-            <Text color="gray" dimColor>
+            <Text color={theme.text.subtle} dimColor>
               {label}
             </Text>
           ) : null}
         </Box>
       </Box>
       <Box paddingX={1}>
-        <Text color={tokenState.warning ? "yellow" : "gray"}>{formatTokenStatus(tokenState)}</Text>
+        <Text color={tokenState.warning ? theme.status.warn : theme.text.muted}>{formatTokenStatus(tokenState)}</Text>
+        <Box flexGrow={1} />
+        <Text color={theme.text.faint}>Enter send · Alt+Enter/Ctrl+J newline</Text>
       </Box>
     </Box>
   );

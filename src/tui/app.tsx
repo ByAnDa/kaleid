@@ -59,6 +59,16 @@ import {
 } from "./components/OptionCombobox.js";
 import { getTerminalDimensions, type TerminalDimensions } from "./terminal.js";
 import type { Msg } from "./types.js";
+import {
+  DEFAULT_THEME_MODE,
+  detectTerminalAppearance,
+  detectTerminalColorLevel,
+  getResolvedTheme,
+  themeNameForMode,
+  type ResolvedTuiTheme,
+  type ThemeMode
+} from "./theme/index.js";
+import { ProjectBadge, TagBadge } from "./components/Badges.js";
 
 export interface AppProps {
   model: string;
@@ -115,7 +125,14 @@ export interface ResumeFilterState {
 }
 
 export type ResumeFilterFocus = "project" | "label" | "sessions";
-export type SelectorKind = "model" | "reasoning" | "login" | "resume" | "resumeProjectFilter" | "resumeLabelFilter";
+export type SelectorKind =
+  | "model"
+  | "reasoning"
+  | "login"
+  | "resume"
+  | "resumeProjectFilter"
+  | "resumeLabelFilter"
+  | "theme";
 export type SelectorFlow = "standalone" | "modelEffortChain";
 export type ComboboxKind = "project" | "chatlabel";
 export type RenameSlashAction =
@@ -130,6 +147,11 @@ export const RENAME_INPUT_PROMPT = "输入对话名称（可 项目/名称）：
 
 const DEFAULT_RESUME_FILTER: ResumeFilterState = { project: null, label: null };
 const EMPTY_SESSION_METADATA_OPTIONS: SessionMetadataOptions = { projects: [], labels: [] };
+const THEME_OPTION_LABELS: Record<ThemeMode, string> = {
+  system: "跟随终端",
+  daylight: "Daylight",
+  spectrum: "Spectrum"
+};
 
 export interface SelectorTransitionInput {
   activeSelector: SelectorKind;
@@ -418,7 +440,9 @@ export function cancelSelectorTransition(input: SelectorCancelInput): SelectorTr
               ? "已取消项目筛选"
               : input.activeSelector === "resumeLabelFilter"
                 ? "已取消标签筛选"
-                : "已取消推理强度选择"
+                : input.activeSelector === "theme"
+                  ? "已取消主题选择"
+                  : "已取消推理强度选择"
   };
 }
 
@@ -444,24 +468,41 @@ function useTerminalDimensions(): TerminalDimensions {
 interface ResumeFilterBarProps {
   filter: ResumeFilterState;
   focus: ResumeFilterFocus;
+  theme: ResolvedTuiTheme;
   width: number;
 }
 
-function ResumeFilterBar({ filter, focus, width }: ResumeFilterBarProps): React.ReactElement {
-  const renderFilter = (kind: Exclude<ResumeFilterFocus, "sessions">, text: string) => {
+function ResumeFilterBar({ filter, focus, theme, width }: ResumeFilterBarProps): React.ReactElement {
+  const renderFilter = (kind: Exclude<ResumeFilterFocus, "sessions">, label: string, value: string | null) => {
     const selected = focus === kind;
+    const text = `${label}: ${formatResumeFilterValue(value)}`;
     return (
-      <Text backgroundColor={selected ? "green" : undefined} color={selected ? "black" : "cyan"}>
-        {text}
-      </Text>
+      <>
+        <Text
+          backgroundColor={selected ? theme.selection.bg : undefined}
+          color={selected ? theme.selection.fg : theme.accent.primary}
+        >
+          {text}
+        </Text>
+        {value ? (
+          <>
+            <Text> </Text>
+            {kind === "project" ? (
+              <ProjectBadge project={value} theme={theme} />
+            ) : (
+              <TagBadge label={value} theme={theme} />
+            )}
+          </>
+        ) : null}
+      </>
     );
   };
 
   return (
     <Box flexShrink={0} paddingX={1} width={width}>
-      {renderFilter("project", `project: ${formatResumeFilterValue(filter.project)}`)}
+      {renderFilter("project", "project", filter.project)}
       <Text>  </Text>
-      {renderFilter("label", `label: ${formatResumeFilterValue(filter.label)}`)}
+      {renderFilter("label", "label", filter.label)}
     </Box>
   );
 }
@@ -481,6 +522,9 @@ export function App({
   const terminal = useTerminalDimensions();
   const [currentSession, setCurrentSession] = useState(session);
   const [conversationLabel, setConversationLabel] = useState(() => formatInputConversationLabel(session.metadata));
+  const [themeMode, setThemeMode] = useState<ThemeMode>(DEFAULT_THEME_MODE);
+  const [terminalAppearance] = useState(() => detectTerminalAppearance());
+  const [terminalColorLevel] = useState(() => detectTerminalColorLevel());
   const [currentModel, setCurrentModel] = useState(session.metadata.model ?? model);
   const [availableModels, setAvailableModels] = useState<AvailableModel[]>([]);
   const [reasoningEffort, setReasoningEffort] = useState<ReasoningEffort>(
@@ -513,6 +557,10 @@ export function App({
   const abortRef = useRef<AbortController | null>(null);
   const manualCodeRef = useRef<{ resolve: (value: string) => void; reject: (error: Error) => void } | null>(null);
   const slashCompletions = useMemo(() => getSlashCommandCompletions(input), [input]);
+  const theme = useMemo(
+    () => getResolvedTheme(themeMode, terminalAppearance, terminalColorLevel),
+    [terminalAppearance, terminalColorLevel, themeMode]
+  );
   const slashCandidates = slashCompletions ?? [];
   const slashMenuVisible =
     !busy &&
@@ -539,6 +587,18 @@ export function App({
       })),
     [reasoningEffort]
   );
+  const themeOptions = useMemo<OptionSelectorItem[]>(
+    () =>
+      (Object.keys(THEME_OPTION_LABELS) as ThemeMode[]).map((mode) => ({
+        id: mode,
+        display:
+          mode === "system"
+            ? `${THEME_OPTION_LABELS[mode]} (${themeNameForMode(mode, terminalAppearance)})`
+            : THEME_OPTION_LABELS[mode],
+        current: mode === themeMode
+      })),
+    [terminalAppearance, themeMode]
+  );
   const resumeOptions = useMemo<OptionSelectorItem[]>(
     () => buildResumeSelectorOptions(resumeSessions, resumeFilter),
     [resumeFilter, resumeSessions]
@@ -558,13 +618,15 @@ export function App({
         ? reasoningOptions
         : activeSelector === "login"
           ? LOGIN_OPTIONS
-          : activeSelector === "resume"
-            ? resumeOptions
-            : activeSelector === "resumeProjectFilter"
-              ? resumeProjectFilterOptions
-              : activeSelector === "resumeLabelFilter"
-                ? resumeLabelFilterOptions
-                : [];
+          : activeSelector === "theme"
+            ? themeOptions
+            : activeSelector === "resume"
+              ? resumeOptions
+              : activeSelector === "resumeProjectFilter"
+                ? resumeProjectFilterOptions
+                : activeSelector === "resumeLabelFilter"
+                  ? resumeLabelFilterOptions
+                  : [];
   const selectedSelectorIndex =
     selectorOptions.length === 0 ? -1 : Math.min(selectorIndex, selectorOptions.length - 1);
   const selectorVisible = activeSelector !== null;
@@ -575,6 +637,8 @@ export function App({
   const comboboxHeight = comboboxVisible ? getOptionComboboxHeight(comboboxOptions.length, comboboxInput) : 0;
   const resumeFilterHeight = activeSelector === "resume" ? 1 : 0;
   const inputBarHeight = getInputBarHeight({
+    input,
+    inputWidth: Math.max(1, terminal.columns - 12),
     manualCodePrompt,
     slashCommandCount: slashCandidates.length,
     slashMenuVisible,
@@ -635,7 +699,9 @@ export function App({
                 ? resumeProjectFilterOptions
                 : kind === "resumeLabelFilter"
                   ? resumeLabelFilterOptions
-                  : LOGIN_OPTIONS;
+                  : kind === "theme"
+                    ? themeOptions
+                    : LOGIN_OPTIONS;
       setInput("");
       setSlashMenuOpen(false);
       setSlashMenuIndex(0);
@@ -649,7 +715,8 @@ export function App({
       reasoningOptions,
       resumeLabelFilterOptions,
       resumeOptions,
-      resumeProjectFilterOptions
+      resumeProjectFilterOptions,
+      themeOptions
     ]
   );
 
@@ -994,6 +1061,19 @@ export function App({
       return;
     }
 
+    if (activeSelector === "theme") {
+      const nextMode = selected.id as ThemeMode;
+      setThemeMode(nextMode);
+      const nextThemeName = themeNameForMode(nextMode, terminalAppearance);
+      commit({
+        id: nextId(),
+        role: "system",
+        text: `已切换主题: ${THEME_OPTION_LABELS[nextMode]} (${nextThemeName})`
+      });
+      closeSelector();
+      return;
+    }
+
     if (activeSelector === "login") {
       void runLoginFlow(selected.id as ProviderId);
       return;
@@ -1082,7 +1162,8 @@ export function App({
     restoreSession,
     selectedSelectorIndex,
     selectorFlow,
-    selectorOptions
+    selectorOptions,
+    terminalAppearance
   ]);
 
   useInput((value, key) => {
@@ -1339,6 +1420,12 @@ export function App({
           return;
         }
 
+        if (slash.command === "/theme") {
+          setSlashMenuOpen(false);
+          openSelector("theme");
+          return;
+        }
+
         if (slash.command === "/resume") {
           setSlashMenuOpen(false);
           await openResumeSelector();
@@ -1584,14 +1671,24 @@ export function App({
   return (
     <Box flexDirection="column" height={terminal.rows} width={terminal.columns}>
       <Header
+        labels={currentSession.metadata.labels}
         model={currentModel}
+        name={currentSession.metadata.name}
+        project={currentSession.metadata.project}
         provider={currentProvider}
         reasoningEffort={providerSupportsReasoningEffort(currentProvider) ? reasoningEffort : null}
+        theme={theme}
         width={terminal.columns}
       />
-      <Conversation height={conversationHeight} messages={history} streaming={streaming} width={terminal.columns} />
+      <Conversation
+        height={conversationHeight}
+        messages={history}
+        streaming={streaming}
+        theme={theme}
+        width={terminal.columns}
+      />
       {activeSelector === "resume" ? (
-        <ResumeFilterBar filter={resumeFilter} focus={resumeFocus} width={terminal.columns} />
+        <ResumeFilterBar filter={resumeFilter} focus={resumeFocus} theme={theme} width={terminal.columns} />
       ) : null}
       {selectorVisible ? (
         <OptionSelector
@@ -1608,8 +1705,11 @@ export function App({
                     ? "Filter project"
                     : activeSelector === "resumeLabelFilter"
                       ? "Filter label"
-                      : "Select reasoning effort"
+                      : activeSelector === "theme"
+                        ? "Select theme"
+                        : "Select reasoning effort"
           }
+          theme={theme}
           width={terminal.columns}
         />
       ) : null}
@@ -1620,6 +1720,7 @@ export function App({
           onSubmit={submitCombobox}
           options={comboboxOptions}
           selectedIndex={selectedComboboxIndex}
+          theme={theme}
           title={activeCombobox === "project" ? "Set project" : "Add label"}
           width={terminal.columns}
         />
@@ -1638,6 +1739,7 @@ export function App({
         slashCommandCount={slashCandidates.length}
         slashMenuVisible={slashMenuVisible}
         status={status}
+        theme={theme}
         tokenState={tokenState}
         conversationLabel={conversationLabel}
         width={terminal.columns}

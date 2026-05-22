@@ -1,5 +1,6 @@
 import React from "react";
 import { Box, Text } from "ink";
+import type { ResolvedTuiTheme } from "../theme/index.js";
 
 export interface OptionSelectorItem {
   id: string;
@@ -14,6 +15,7 @@ export interface OptionSelectorProps {
   title: string;
   options: OptionSelectorItem[];
   selectedIndex: number;
+  theme: ResolvedTuiTheme;
   width: number;
 }
 
@@ -34,23 +36,37 @@ export function OptionSelector({
   title,
   options,
   selectedIndex,
+  theme,
   width
 }: OptionSelectorProps): React.ReactElement {
   return (
-    <Box borderStyle="round" borderColor="cyan" flexDirection="column" flexShrink={0} paddingX={1} width={width}>
-      <Text bold color="cyan">
+    <Box
+      borderStyle="single"
+      borderColor={theme.border.default}
+      flexDirection="column"
+      flexShrink={0}
+      paddingX={1}
+      width={width}
+    >
+      <Text bold color={theme.accent.primary}>
         {title}
       </Text>
       {options.length === 0 ? (
-        <Text color="yellow">No options</Text>
+        <Text color={theme.status.warn}>No options</Text>
       ) : (
         options.map((option, index) => {
           const selected = index === selectedIndex;
-          const color = option.disabled ? "yellow" : selected ? "black" : option.current ? "white" : "gray";
+          const color = option.disabled
+            ? theme.status.warn
+            : selected
+              ? theme.selection.fg
+              : option.current
+                ? theme.text.primary
+                : theme.text.muted;
           return (
             <Text
               key={option.id}
-              backgroundColor={selected && !option.disabled ? "green" : undefined}
+              backgroundColor={selected && !option.disabled ? theme.selection.bg : undefined}
               color={color}
             >
               {formatOptionSelectorLine(option, selected)}

@@ -3,6 +3,7 @@ import { Box } from "ink";
 import type { Msg } from "../types.js";
 import { Message, getMessageStyle } from "./Message.js";
 import { formatToolCallLine } from "./ToolCall.js";
+import type { ResolvedTuiTheme } from "../theme/index.js";
 
 export type ConversationEntry =
   | { id: string; kind: "message"; msg: Msg }
@@ -133,19 +134,25 @@ export interface ConversationProps {
   messages: Msg[];
   streaming: string | null;
   height: number;
+  theme: ResolvedTuiTheme;
   width: number;
 }
 
-export function Conversation({ messages, streaming, height, width }: ConversationProps): React.ReactElement {
+export function Conversation({ messages, streaming, height, theme, width }: ConversationProps): React.ReactElement {
   const entries = getVisibleConversationEntries(buildConversationEntries(messages, streaming), height, width - 2);
 
   return (
     <Box flexDirection="column" flexGrow={1} height={height} overflow="hidden" paddingX={1} width={width}>
       {entries.map((entry) =>
         entry.kind === "streaming" ? (
-          <Message key={entry.id} msg={{ id: entry.id, role: "assistant", text: entry.text }} width={width - 2} />
+          <Message
+            key={entry.id}
+            msg={{ id: entry.id, role: "assistant", text: entry.text }}
+            theme={theme}
+            width={width - 2}
+          />
         ) : (
-          <Message key={entry.id} msg={entry.msg} width={width - 2} />
+          <Message key={entry.id} msg={entry.msg} theme={theme} width={width - 2} />
         )
       )}
     </Box>
