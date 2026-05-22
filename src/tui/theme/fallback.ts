@@ -43,9 +43,9 @@ const ANSI16_SEMANTIC_THEMES: Record<ThemeName, ThemeColorTokens> = {
       subtle: "white"
     },
     accent: {
-      primary: "cyan",
-      secondary: "magenta",
-      quiet: "white"
+      default: "cyan",
+      soft: "white",
+      on: "black"
     },
     role: {
       system: { fg: "gray", gutter: "gray" },
@@ -70,7 +70,12 @@ const ANSI16_SEMANTIC_THEMES: Record<ThemeName, ThemeColorTokens> = {
       docs: { bg: "white", fg: "blue" },
       inbox: { bg: "gray", fg: "white" }
     },
-    project: { bg: "black", fg: "white" },
+    project: {
+      kaleid: { bg: "magenta", fg: "white" },
+      "web-app": { bg: "cyan", fg: "black" },
+      research: { bg: "yellow", fg: "black" },
+      personal: { bg: "green", fg: "black" }
+    },
     selection: { bg: "cyan", fg: "black" }
   },
   spectrum: {
@@ -94,9 +99,9 @@ const ANSI16_SEMANTIC_THEMES: Record<ThemeName, ThemeColorTokens> = {
       subtle: "black"
     },
     accent: {
-      primary: "cyan",
-      secondary: "magenta",
-      quiet: "black"
+      default: "magenta",
+      soft: "black",
+      on: "white"
     },
     role: {
       system: { fg: "gray", gutter: "gray" },
@@ -121,8 +126,13 @@ const ANSI16_SEMANTIC_THEMES: Record<ThemeName, ThemeColorTokens> = {
       docs: { bg: "white", fg: "blue" },
       inbox: { bg: "gray", fg: "white" }
     },
-    project: { bg: "cyan", fg: "black" },
-    selection: { bg: "cyan", fg: "black" }
+    project: {
+      kaleid: { bg: "magenta", fg: "white" },
+      "web-app": { bg: "cyan", fg: "black" },
+      research: { bg: "yellow", fg: "black" },
+      personal: { bg: "green", fg: "black" }
+    },
+    selection: { bg: "magenta", fg: "white" }
   }
 };
 
@@ -227,6 +237,7 @@ export function resolveTheme(theme: TuiTheme, colorLevel: TerminalColorLevel, mo
   if (colorLevel === "ansi16") {
     return {
       ...ANSI16_SEMANTIC_THEMES[theme.name],
+      gutterStyle: theme.gutterStyle,
       name: theme.name,
       mode,
       colorLevel
@@ -255,9 +266,9 @@ export function resolveTheme(theme: TuiTheme, colorLevel: TerminalColorLevel, mo
       subtle: map(theme.border.subtle)
     },
     accent: {
-      primary: map(theme.accent.primary),
-      secondary: map(theme.accent.secondary),
-      quiet: map(theme.accent.quiet)
+      default: map(theme.accent.default),
+      soft: map(theme.accent.soft),
+      on: map(theme.accent.on)
     },
     role: {
       system: { fg: map(theme.role.system.fg), gutter: map(theme.role.system.gutter) },
@@ -282,12 +293,18 @@ export function resolveTheme(theme: TuiTheme, colorLevel: TerminalColorLevel, mo
       docs: mapBadgeColors(theme.tag.docs, colorLevel),
       inbox: mapBadgeColors(theme.tag.inbox, colorLevel)
     },
-    project: mapBadgeColors(theme.project, colorLevel),
+    project: {
+      kaleid: mapBadgeColors(theme.project.kaleid, colorLevel),
+      "web-app": mapBadgeColors(theme.project["web-app"], colorLevel),
+      research: mapBadgeColors(theme.project.research, colorLevel),
+      personal: mapBadgeColors(theme.project.personal, colorLevel)
+    },
     selection: mapBadgeColors(theme.selection, colorLevel)
   };
 
   return {
     ...tokens,
+    gutterStyle: theme.gutterStyle,
     name: theme.name,
     mode,
     colorLevel

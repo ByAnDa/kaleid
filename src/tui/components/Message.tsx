@@ -1,6 +1,7 @@
 import React from "react";
 import { Box, Text } from "ink";
 import { ToolCall } from "./ToolCall.js";
+import { RoleGutter } from "./RoleGutter.js";
 import type { Msg } from "../types.js";
 import { DEFAULT_RESOLVED_THEME, type ResolvedTuiTheme, type RoleTokenName } from "../theme/index.js";
 
@@ -19,22 +20,22 @@ function roleTokenName(role: Msg["role"]): RoleTokenName {
 export function getMessageStyle(role: Msg["role"], theme: ResolvedTuiTheme = DEFAULT_RESOLVED_THEME): MessageStyle {
   const token = theme.role[roleTokenName(role)];
   if (role === "user") {
-    return { label: "you ›", color: token.fg, gutter: token.gutter, bold: true };
+    return { label: "you", color: token.fg, gutter: token.gutter, bold: true };
   }
 
   if (role === "assistant") {
-    return { label: "kaleid ›", color: token.fg, gutter: token.gutter };
+    return { label: "kaleid", color: token.fg, gutter: token.gutter };
   }
 
   if (role === "tool") {
-    return { label: "tool ›", color: token.fg, gutter: token.gutter };
+    return { label: "tool", color: token.fg, gutter: token.gutter };
   }
 
   if (role === "system") {
-    return { label: "system ›", color: token.fg, gutter: token.gutter, dimColor: true };
+    return { label: "system", color: token.fg, gutter: token.gutter, dimColor: true };
   }
 
-  return { label: "error ›", color: token.fg, gutter: token.gutter };
+  return { label: "error", color: token.fg, gutter: token.gutter };
 }
 
 function textLength(value: string): number {
@@ -66,7 +67,7 @@ export function Message({
         const fill = " ".repeat(Math.max(0, lineWidth - 3 - textLength(label) - textLength(line)));
         return (
           <Box key={index} flexDirection="row" width={width}>
-            <Text backgroundColor={style.gutter}>  </Text>
+            <RoleGutter color={style.gutter} theme={theme} />
             <Text backgroundColor={theme.surface.canvas}> </Text>
             <Text backgroundColor={theme.surface.canvas} color={style.color} dimColor={style.dimColor}>
               <Text bold={style.bold}>{label}</Text>

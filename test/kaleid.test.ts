@@ -87,6 +87,7 @@ import {
 import { formatHeaderState, truncateHeaderState } from "../src/tui/components/Header.js";
 import { formatTokenStatus, getInputBarHeight, truncateConversationLabel } from "../src/tui/components/InputBar.js";
 import { getMessageStyle } from "../src/tui/components/Message.js";
+import { getProjectTokenName, getTagTokenName } from "../src/tui/components/Badges.js";
 import {
   MULTILINE_INPUT_NEWLINE_HINT,
   getMultilineInputRows,
@@ -98,11 +99,14 @@ import { formatOptionSelectorLine, getOptionSelectorHeight } from "../src/tui/co
 import { formatToolCallLine } from "../src/tui/components/ToolCall.js";
 import {
   DEFAULT_RESOLVED_THEME,
+  daylightTheme,
   detectTerminalAppearance,
   detectTerminalColorLevel,
   getResolvedTheme,
   nearestAnsi256Color,
   nearestAnsiColor,
+  spectrumTheme,
+  type TuiTheme,
   themeNameForMode
 } from "../src/tui/theme/index.js";
 import {
@@ -533,18 +537,18 @@ test("TUI conversation keeps newest messages pinned to the bottom", () => {
 test("TUI message labels and tool calls use distinct visual roles", () => {
   const theme = DEFAULT_RESOLVED_THEME;
   assert.deepEqual(getMessageStyle("user"), {
-    label: "you ›",
+    label: "you",
     color: theme.role.user.fg,
     gutter: theme.role.user.gutter,
     bold: true
   });
   assert.deepEqual(getMessageStyle("assistant"), {
-    label: "kaleid ›",
+    label: "kaleid",
     color: theme.role.assistant.fg,
     gutter: theme.role.assistant.gutter
   });
   assert.deepEqual(getMessageStyle("system"), {
-    label: "system ›",
+    label: "system",
     color: theme.role.system.fg,
     gutter: theme.role.system.gutter,
     dimColor: true
@@ -564,6 +568,146 @@ test("TUI message labels and tool calls use distinct visual roles", () => {
   assert.match(failure, /✘ not found/u);
 });
 
+function designTokenSnapshot(theme: TuiTheme) {
+  const { system, user, assistant, tool } = theme.role;
+  return {
+    gutterStyle: theme.gutterStyle,
+    surface: theme.surface,
+    text: theme.text,
+    border: theme.border,
+    accent: theme.accent,
+    role: { system, user, assistant, tool },
+    status: theme.status,
+    tag: theme.tag,
+    project: theme.project,
+    selection: theme.selection
+  };
+}
+
+test("TUI themes match the committed kaleid design tokens", () => {
+  assert.deepEqual(designTokenSnapshot(daylightTheme), {
+    gutterStyle: "bar",
+    surface: {
+      canvas: "#f6f3ea",
+      panel: "#fbf8ee",
+      raised: "#fdfaef",
+      chrome: "#ece5d2"
+    },
+    text: {
+      primary: "#28241b",
+      secondary: "#4a4537",
+      muted: "#857e6d",
+      subtle: "#a8a190",
+      faint: "#cfc8b5",
+      onChrome: "#5d564a"
+    },
+    border: {
+      strong: "#bdb5a0",
+      default: "#dbd4c1",
+      subtle: "#e8e1cc"
+    },
+    accent: {
+      default: "#b8431a",
+      soft: "#e8d2c0",
+      on: "#fbf8ee"
+    },
+    role: {
+      system: { fg: "#857e6d", gutter: "#bdb5a0" },
+      user: { fg: "#0e547d", gutter: "#0e547d" },
+      assistant: { fg: "#7b2c10", gutter: "#b8431a" },
+      tool: { fg: "#6a4a0a", gutter: "#a17612" }
+    },
+    status: {
+      ok: "#1f5e36",
+      warn: "#a17612",
+      err: "#8e2222",
+      info: "#0e547d"
+    },
+    tag: {
+      review: { bg: "#d5e6f3", fg: "#0c4670" },
+      wip: { bg: "#f1e1bb", fg: "#7a5b0d" },
+      design: { bg: "#efd9e6", fg: "#86234a" },
+      infra: { bg: "#cee8d5", fg: "#1f5e36" },
+      planning: { bg: "#e1dbef", fg: "#4c2e95" },
+      refactor: { bg: "#f0d6d6", fg: "#8e2222" },
+      docs: { bg: "#d6e6c8", fg: "#3d5a1e" },
+      inbox: { bg: "#dfd7c2", fg: "#5d564a" }
+    },
+    project: {
+      kaleid: { bg: "#e1dbef", fg: "#4c2e95" },
+      "web-app": { bg: "#d5e6f3", fg: "#0c4670" },
+      research: { bg: "#f1e1bb", fg: "#7a5b0d" },
+      personal: { bg: "#cee8d5", fg: "#1f5e36" }
+    },
+    selection: { bg: "#e8d2c0", fg: "#28241b" }
+  });
+
+  assert.deepEqual(designTokenSnapshot(spectrumTheme), {
+    gutterStyle: "block",
+    surface: {
+      canvas: "#0b0b14",
+      panel: "#0e0e1a",
+      raised: "#15152a",
+      chrome: "#1a1a28"
+    },
+    text: {
+      primary: "#e6e3f0",
+      secondary: "#a8a3c0",
+      muted: "#706c80",
+      subtle: "#4a4660",
+      faint: "#26243a",
+      onChrome: "#94909e"
+    },
+    border: {
+      strong: "#2a283e",
+      default: "#1c1c2e",
+      subtle: "#22203a"
+    },
+    accent: {
+      default: "#ec4899",
+      soft: "#4a1d35",
+      on: "#0b0b14"
+    },
+    role: {
+      system: { fg: "#8a8598", gutter: "#3a3550" },
+      user: { fg: "#67e8f9", gutter: "#06b6d4" },
+      assistant: { fg: "#d8b4fe", gutter: "#a855f7" },
+      tool: { fg: "#fde047", gutter: "#eab308" }
+    },
+    status: {
+      ok: "#6ee7b7",
+      warn: "#fde047",
+      err: "#fca5a5",
+      info: "#67e8f9"
+    },
+    tag: {
+      review: { bg: "#0b4456", fg: "#a5f3fc" },
+      wip: { bg: "#4a3a0a", fg: "#fde047" },
+      design: { bg: "#3a1456", fg: "#d8b4fe" },
+      infra: { bg: "#0a3a2e", fg: "#6ee7b7" },
+      planning: { bg: "#561234", fg: "#fbcfe8" },
+      refactor: { bg: "#56120e", fg: "#fca5a5" },
+      docs: { bg: "#173d22", fg: "#bef264" },
+      inbox: { bg: "#272538", fg: "#a8a3c0" }
+    },
+    project: {
+      kaleid: { bg: "#3a1456", fg: "#d8b4fe" },
+      "web-app": { bg: "#0b3a52", fg: "#67e8f9" },
+      research: { bg: "#4a2a0e", fg: "#fdba74" },
+      personal: { bg: "#0c3a26", fg: "#86efac" }
+    },
+    selection: { bg: "#2a1d44", fg: "#e6e3f0" }
+  });
+});
+
+test("TUI badges resolve design token palettes by semantic name", () => {
+  assert.equal(getTagTokenName("#review"), "review");
+  assert.equal(getTagTokenName("unknown") in daylightTheme.tag, true);
+  assert.equal(getProjectTokenName("kaleid"), "kaleid");
+  assert.equal(getProjectTokenName("web-app"), "web-app");
+  assert.equal(getProjectTokenName("unknown") in daylightTheme.project, true);
+});
+
 test("TUI themes follow terminal appearance and fall back for low-color terminals", () => {
   assert.equal(detectTerminalAppearance({ COLORFGBG: "0;15" } as NodeJS.ProcessEnv), "light");
   assert.equal(detectTerminalAppearance({ COLORFGBG: "15;0" } as NodeJS.ProcessEnv), "dark");
@@ -576,18 +720,25 @@ test("TUI themes follow terminal appearance and fall back for low-color terminal
 
   const daylight = getResolvedTheme("system", "light", "truecolor");
   assert.equal(daylight.name, "daylight");
-  assert.match(daylight.role.user.fg, /^#/u);
+  assert.equal(daylight.surface.canvas, "#f6f3ea");
+  assert.equal(daylight.accent.default, "#b8431a");
+  assert.equal(daylight.role.user.fg, "#0e547d");
+  assert.equal(daylight.project.kaleid.bg, "#e1dbef");
 
   const ansi256 = getResolvedTheme("spectrum", "dark", "ansi256");
   assert.match(ansi256.role.user.fg, /^ansi256\(\d+\)$/u);
+  assert.match(ansi256.project["web-app"].bg, /^ansi256\(\d+\)$/u);
 
   const lowColor = getResolvedTheme("spectrum", "dark", "ansi16");
   assert.equal(lowColor.name, "spectrum");
+  assert.equal(lowColor.gutterStyle, "block");
   assert.doesNotMatch(lowColor.role.user.fg, /^#/u);
   assert.doesNotMatch(lowColor.tag.docs.bg, /^#/u);
   assert.equal(new Set(Object.values(lowColor.tag).map((tag) => `${tag.bg}/${tag.fg}`)).size, 8);
+  assert.equal(new Set(Object.values(lowColor.project).map((project) => `${project.bg}/${project.fg}`)).size, 4);
 
   const daylightLowColor = getResolvedTheme("daylight", "light", "ansi16");
+  assert.equal(daylightLowColor.gutterStyle, "bar");
   assert.notEqual(daylightLowColor.role.tool.fg, daylightLowColor.role.error.fg);
   assert.notEqual(daylightLowColor.status.warn, daylightLowColor.status.err);
   assert.equal(daylightLowColor.surface.canvas, "white");

@@ -480,7 +480,7 @@ function ResumeFilterBar({ filter, focus, theme, width }: ResumeFilterBarProps):
       <>
         <Text
           backgroundColor={selected ? theme.selection.bg : theme.surface.panel}
-          color={selected ? theme.selection.fg : theme.accent.primary}
+          color={selected ? theme.selection.fg : theme.accent.default}
         >
           {text}
         </Text>

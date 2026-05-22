@@ -58,11 +58,11 @@ export function OptionCombobox({
       paddingX={1}
       width={width}
     >
-      <Text backgroundColor={theme.surface.raised} bold color={theme.accent.primary}>
+      <Text backgroundColor={theme.surface.raised} bold color={theme.accent.default}>
         {title}
       </Text>
       <Box flexDirection="row">
-        <Text backgroundColor={theme.surface.raised} bold color={theme.accent.primary}>
+        <Text backgroundColor={theme.surface.raised} bold color={theme.accent.default}>
           ›{" "}
         </Text>
         <TextInput value={input} onChange={onChange} onSubmit={onSubmit} />

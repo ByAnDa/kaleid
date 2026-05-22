@@ -1,5 +1,6 @@
 import React from "react";
 import { Box, Text } from "ink";
+import { RoleGutter } from "./RoleGutter.js";
 import type { ResolvedTuiTheme } from "../theme/index.js";
 
 export interface ToolCallView {
@@ -65,7 +66,7 @@ export function ToolCall({
   const fill = " ".repeat(Math.max(0, panelWidth - textLength(line) - 2));
   return (
     <Box flexDirection="row" width={width}>
-      <Text backgroundColor={theme.role.tool.gutter}>  </Text>
+      <RoleGutter color={theme.role.tool.gutter} theme={theme} />
       <Text backgroundColor={theme.surface.canvas}> </Text>
       <Text backgroundColor={theme.surface.raised}>
         {" "}

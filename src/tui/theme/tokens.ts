@@ -5,6 +5,7 @@ export type TerminalColorLevel = "truecolor" | "ansi256" | "ansi16";
 
 export type RoleTokenName = "system" | "user" | "assistant" | "tool" | "error";
 export type StatusTokenName = "ok" | "warn" | "err" | "info";
+export type GutterStyle = "bar" | "block";
 export type TagTokenName =
   | "review"
   | "wip"
@@ -14,6 +15,7 @@ export type TagTokenName =
   | "refactor"
   | "docs"
   | "inbox";
+export type ProjectTokenName = "kaleid" | "web-app" | "research" | "personal";
 
 export interface RoleColorTokens {
   fg: string;
@@ -46,18 +48,19 @@ export interface ThemeColorTokens {
     subtle: string;
   };
   accent: {
-    primary: string;
-    secondary: string;
-    quiet: string;
+    default: string;
+    soft: string;
+    on: string;
   };
   role: Record<RoleTokenName, RoleColorTokens>;
   status: Record<StatusTokenName, string>;
   tag: Record<TagTokenName, BadgeColorTokens>;
-  project: BadgeColorTokens;
+  project: Record<ProjectTokenName, BadgeColorTokens>;
   selection: BadgeColorTokens;
 }
 
 export interface TuiTheme extends ThemeColorTokens {
+  gutterStyle: GutterStyle;
   name: ThemeName;
 }
 

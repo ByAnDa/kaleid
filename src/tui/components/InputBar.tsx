@@ -137,13 +137,13 @@ export function InputBar({
 }: InputBarProps): React.ReactElement {
   const prompt = inputPrompt ?? (manualCodePrompt ? "input> " : "› ");
   const borderColor = inputPrompt
-    ? theme.accent.secondary
+    ? theme.accent.default
     : manualCodePrompt
       ? theme.status.warn
       : disabled
         ? theme.border.subtle
-        : theme.accent.primary;
-  const promptColor = inputPrompt ? theme.accent.secondary : manualCodePrompt ? theme.status.warn : theme.accent.primary;
+        : theme.accent.default;
+  const promptColor = inputPrompt ? theme.accent.default : manualCodePrompt ? theme.status.warn : theme.accent.default;
   const labelMaxWidth = Math.max(0, Math.min(48, width - 12));
   const label = truncateConversationLabel(conversationLabel, labelMaxWidth);
   const inputRows = getMultilineInputRows(input, Math.max(1, width - prompt.length - label.length - 8));

@@ -2,53 +2,59 @@ import type { TuiTheme } from "./tokens.js";
 
 export const spectrumTheme: TuiTheme = {
   name: "spectrum",
+  gutterStyle: "block",
   surface: {
-    canvas: "#111316",
-    panel: "#181b20",
-    raised: "#20252b",
-    chrome: "#e8edf2"
+    canvas: "#0b0b14",
+    panel: "#0e0e1a",
+    raised: "#15152a",
+    chrome: "#1a1a28"
   },
   text: {
-    primary: "#eef2f5",
-    secondary: "#c2cbd3",
-    muted: "#8d99a5",
-    subtle: "#67727f",
-    faint: "#48515d",
-    onChrome: "#111316"
+    primary: "#e6e3f0",
+    secondary: "#a8a3c0",
+    muted: "#706c80",
+    subtle: "#4a4660",
+    faint: "#26243a",
+    onChrome: "#94909e"
   },
   border: {
-    strong: "#75808c",
-    default: "#3a424c",
-    subtle: "#262c33"
+    strong: "#2a283e",
+    default: "#1c1c2e",
+    subtle: "#22203a"
   },
   accent: {
-    primary: "#37d3c3",
-    secondary: "#a78bfa",
-    quiet: "#143a3a"
+    default: "#ec4899",
+    soft: "#4a1d35",
+    on: "#0b0b14"
   },
   role: {
-    system: { fg: "#9aa5b1", gutter: "#5c6671" },
-    user: { fg: "#5eead4", gutter: "#14b8a6" },
-    assistant: { fg: "#93c5fd", gutter: "#4f8ff7" },
-    tool: { fg: "#fbbf77", gutter: "#f59e0b" },
-    error: { fg: "#fb7185", gutter: "#f43f5e" }
+    system: { fg: "#8a8598", gutter: "#3a3550" },
+    user: { fg: "#67e8f9", gutter: "#06b6d4" },
+    assistant: { fg: "#d8b4fe", gutter: "#a855f7" },
+    tool: { fg: "#fde047", gutter: "#eab308" },
+    error: { fg: "#fca5a5", gutter: "#fca5a5" }
   },
   status: {
-    ok: "#4ade80",
-    warn: "#fbbf24",
-    err: "#fb7185",
-    info: "#60a5fa"
+    ok: "#6ee7b7",
+    warn: "#fde047",
+    err: "#fca5a5",
+    info: "#67e8f9"
   },
   tag: {
-    review: { bg: "#5f2626", fg: "#ffd6d6" },
-    wip: { bg: "#624a14", fg: "#ffe8a3" },
-    design: { bg: "#3b2f75", fg: "#e6ddff" },
-    infra: { bg: "#16485d", fg: "#caedfb" },
-    planning: { bg: "#294d23", fg: "#d9f8cb" },
-    refactor: { bg: "#5a2a55", fg: "#ffd8f7" },
-    docs: { bg: "#283d78", fg: "#dbe7ff" },
-    inbox: { bg: "#3d4650", fg: "#e6ebef" }
+    review: { bg: "#0b4456", fg: "#a5f3fc" },
+    wip: { bg: "#4a3a0a", fg: "#fde047" },
+    design: { bg: "#3a1456", fg: "#d8b4fe" },
+    infra: { bg: "#0a3a2e", fg: "#6ee7b7" },
+    planning: { bg: "#561234", fg: "#fbcfe8" },
+    refactor: { bg: "#56120e", fg: "#fca5a5" },
+    docs: { bg: "#173d22", fg: "#bef264" },
+    inbox: { bg: "#272538", fg: "#a8a3c0" }
   },
-  project: { bg: "#37d3c3", fg: "#081312" },
-  selection: { bg: "#37d3c3", fg: "#071615" }
+  project: {
+    kaleid: { bg: "#3a1456", fg: "#d8b4fe" },
+    "web-app": { bg: "#0b3a52", fg: "#67e8f9" },
+    research: { bg: "#4a2a0e", fg: "#fdba74" },
+    personal: { bg: "#0c3a26", fg: "#86efac" }
+  },
+  selection: { bg: "#2a1d44", fg: "#e6e3f0" }
 };

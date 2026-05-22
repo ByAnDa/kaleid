@@ -48,7 +48,7 @@ export function OptionSelector({
       paddingX={1}
       width={width}
     >
-      <Text backgroundColor={theme.surface.raised} bold color={theme.accent.primary}>
+      <Text backgroundColor={theme.surface.raised} bold color={theme.accent.default}>
         {title}
       </Text>
       {options.length === 0 ? (
