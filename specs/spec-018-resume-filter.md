@@ -58,4 +58,4 @@ spec-014 的 `--resume` / `/resume` 会话选择器列出历史会话（spec-016
 - `test/` — 筛选交互、AND、清除、空结果、resume 不回归 覆盖
 
 ## 发布
-self-merge 到 dev 后发布（版本号由项目所有者定）。
+从 `dev` 切 **`feature/spec-<编号>-<slug>`** 分支开发 → CI/自测 → **self-merge 回 dev**（勿用 Multica 自动 hash 分支名；勿自行 npm publish，发布由 owner 执行）。版本号由项目所有者定。

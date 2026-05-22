@@ -82,4 +82,4 @@ spec-016 已给会话 metadata 加 `project` + `name`，并在输入框右上角
 - `test/` — combobox 选/输入、distinct 聚合、/project（设/清）、/chatlabel（加/去重/移除/列出）、右上角格式、持久化 覆盖
 
 ## 发布
-self-merge 到 dev 后发布（版本号由项目所有者定）。
+从 `dev` 切 **`feature/spec-<编号>-<slug>`** 分支开发 → CI/自测 → **self-merge 回 dev**（勿用 Multica 自动 hash 分支名；勿自行 npm publish，发布由 owner 执行）。版本号由项目所有者定。
