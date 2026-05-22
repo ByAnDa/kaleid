@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { Box, Text, useInput } from "ink";
 import type { ResolvedTuiTheme } from "../theme/index.js";
-import { charWidth, textWidth } from "./text-width.js";
+import { textWidth, wrapTextLine } from "./text-width.js";
 
 export const MAX_MULTILINE_INPUT_ROWS = 6;
 export const MULTILINE_INPUT_NEWLINE_HINT = "Enter send · Ctrl+J newline";
@@ -68,43 +68,39 @@ function insertCursor(value: string, cursor: number): string {
   return `${value.slice(0, cursor)}|${value.slice(cursor)}`;
 }
 
-export function getMultilineInputRows(value: string, width: number): number {
-  const wrapWidth = Math.max(1, width);
-  const rows = value.split("\n").reduce((total, line) => {
-    const length = Math.max(1, textWidth(line));
-    return total + Math.ceil(length / wrapWidth);
-  }, 0);
-  return clamp(rows, 1, MAX_MULTILINE_INPUT_ROWS);
+export interface MultilineInputRowsOptions {
+  cursor?: number;
+  mask?: string;
 }
 
-function wrapDisplayLine(line: string, width: number): string[] {
+function getMaxCursorRows(value: string, width: number): number {
   const wrapWidth = Math.max(1, width);
-  if (line.length === 0) {
-    return [""];
-  }
+  const lines = value.split("\n");
+  const baseRows = lines.map((line) => wrapTextLine(line, wrapWidth).length);
+  const baseTotal = baseRows.reduce((total, rows) => total + rows, 0);
 
-  const rows: string[] = [];
-  let row = "";
-  let rowWidth = 0;
-
-  for (const char of Array.from(line)) {
-    const nextWidth = rowWidth + charWidth(char);
-    if (row.length > 0 && nextWidth > wrapWidth) {
-      rows.push(row);
-      row = char;
-      rowWidth = charWidth(char);
-    } else {
-      row += char;
-      rowWidth = nextWidth;
-    }
-  }
-
-  rows.push(row);
-  return rows;
+  return lines.reduce((maxRows, line, index) => {
+    const cursorRows = wrapTextLine(insertCursor(line, line.length), wrapWidth).length;
+    return Math.max(maxRows, baseTotal - (baseRows[index] ?? 1) + cursorRows);
+  }, baseTotal);
 }
 
 function wrapDisplayValue(value: string, width: number): string[] {
-  return value.split("\n").flatMap((line) => wrapDisplayLine(line, width));
+  return value.split("\n").flatMap((line) => wrapTextLine(line, width));
+}
+
+export function getMultilineInputRows(
+  value: string,
+  width: number,
+  options: MultilineInputRowsOptions = {}
+): number {
+  const wrapWidth = Math.max(1, width);
+  const displayValue = maskValue(value, options.mask);
+  const rows =
+    options.cursor === undefined
+      ? getMaxCursorRows(displayValue, wrapWidth)
+      : wrapDisplayValue(insertCursor(displayValue, clamp(options.cursor, 0, displayValue.length)), wrapWidth).length;
+  return clamp(rows, 1, MAX_MULTILINE_INPUT_ROWS);
 }
 
 export function normalizeInputText(value: string): string {

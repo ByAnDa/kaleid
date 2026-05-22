@@ -603,6 +603,7 @@ export function App({
   const comboboxHeight = comboboxVisible ? getOptionComboboxHeight(comboboxOptions.length, comboboxInput) : 0;
   const inputBarHeight = getInputBarHeight({
     input,
+    inputMask: manualInputMask,
     inputPrompt: renameInputActive ? RENAME_INPUT_PROMPT : undefined,
     manualCodePrompt,
     slashCommandCount: slashCandidates.length,

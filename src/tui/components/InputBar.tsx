@@ -11,6 +11,7 @@ import { textWidth } from "./text-width.js";
 
 export interface InputBarLayoutState {
   input?: string;
+  inputMask?: string;
   inputPrompt?: string;
   inputWidth?: number;
   manualCodePrompt: string | null;
@@ -37,7 +38,7 @@ export function getInputBarHeight(state: InputBarLayoutState): number {
   const slashMenuRows = state.slashMenuVisible ? Math.max(1, state.slashCommandCount) : 0;
   const prompt = getPrompt(state.inputPrompt, state.manualCodePrompt);
   const inputWidth = state.inputWidth ?? (state.width ? getInputValueWidth(state.width, prompt) : 80);
-  const inputRows = getMultilineInputRows(state.input ?? "", inputWidth);
+  const inputRows = getMultilineInputRows(state.input ?? "", inputWidth, { mask: state.inputMask });
   return 4 + inputRows + manualPromptRows + slashMenuRows;
 }
 
@@ -110,7 +111,7 @@ export function InputBar({
         : theme.accent.default;
   const promptColor = inputPrompt ? theme.accent.default : manualCodePrompt ? theme.status.warn : theme.accent.default;
   const inputWidth = getInputContentWidth(width);
-  const inputRows = getMultilineInputRows(input, getInputValueWidth(width, prompt));
+  const inputRows = getMultilineInputRows(input, getInputValueWidth(width, prompt), { mask: inputMask });
   const tokenStatus = formatTokenStatus(tokenState);
   const footerGap = " ".repeat(Math.max(0, width - 2 - textWidth(tokenStatus) - textWidth(MULTILINE_INPUT_NEWLINE_HINT)));
 

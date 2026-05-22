@@ -87,7 +87,7 @@ import {
 } from "../src/tui/components/Conversation.js";
 import { buildWelcomeIntroText, formatHeaderState, truncateHeaderState } from "../src/tui/components/Header.js";
 import { formatTokenStatus, getInputBarHeight, truncateConversationLabel } from "../src/tui/components/InputBar.js";
-import { getMessageStyle } from "../src/tui/components/Message.js";
+import { formatMessageRows, getMessageStyle } from "../src/tui/components/Message.js";
 import { ROLE_GUTTER_SYMBOL } from "../src/tui/components/RoleGutter.js";
 import { buildStatusLineLayout, formatStatusModel } from "../src/tui/components/StatusLine.js";
 import { getProjectTokenName, getTagTokenName } from "../src/tui/components/Badges.js";
@@ -117,6 +117,7 @@ import {
   type TuiTheme,
   themeNameForMode
 } from "../src/tui/theme/index.js";
+import { textWidth } from "../src/tui/components/text-width.js";
 import {
   ALT_SCREEN_ENTER,
   ALT_SCREEN_EXIT,
@@ -541,6 +542,17 @@ test("TUI conversation keeps newest messages pinned to the bottom", () => {
   const trimmed = getVisibleConversationEntries(buildConversationEntries([], "line 1\nline 2\nline 3"), 2, 40);
   assert.equal(trimmed[0]?.kind, "streaming");
   assert.equal(trimmed[0]?.kind === "streaming" ? trimmed[0].text : "", "line 2\nline 3");
+
+  const wrappedRows = formatMessageRows("abcdef", "you", 8);
+  assert.deepEqual(wrappedRows, [
+    { label: "you ", text: "ab" },
+    { label: "    ", text: "cd" },
+    { label: "    ", text: "ef" }
+  ]);
+  assert.equal(
+    estimateConversationRows(buildConversationEntries([{ id: "wrapped", role: "user", text: "abcdef" }], null), 8),
+    wrappedRows.length
+  );
 });
 
 test("TUI message labels and tool calls use distinct visual roles", () => {
@@ -579,6 +591,16 @@ test("TUI message labels and tool calls use distinct visual roles", () => {
     80
   );
   assert.match(failure, /✘ not found/u);
+
+  const tightToolLine = formatToolCallLine(
+    {
+      name: "very-long-command-name",
+      args: { path: "a".repeat(40) },
+      resultSummary: "b".repeat(40)
+    },
+    20
+  );
+  assert.ok(textWidth(tightToolLine) <= 20);
 });
 
 function designTokenSnapshot(theme: TuiTheme) {
@@ -1045,6 +1067,9 @@ test("TUI input footer reserves rows for status, slash menu, and OAuth paste mod
   assert.equal(truncateConversationLabel("abcdef", 2), "a…");
   assert.equal(getMultilineInputRows("one\ntwo", 80), 2);
   assert.equal(getMultilineInputRows("x\nx\nx\nx\nx\nx\nx", 80), 6);
+  assert.equal(getMultilineInputRows("xxxx", 4), 2);
+  assert.equal(getMultilineInputRows("xxxx\nok", 4), 3);
+  assert.equal(getMultilineInputRows("xxxx\nok", 4, { cursor: 7 }), 2);
   assert.equal(MULTILINE_INPUT_NEWLINE_HINT, "Enter send · Ctrl+J newline");
   assert.equal(shouldInsertInputNewline("j", { ctrl: true }), true);
   assert.equal(shouldInsertInputNewline("", { meta: true, return: true }), true);

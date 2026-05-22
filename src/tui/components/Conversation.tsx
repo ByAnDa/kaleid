@@ -1,10 +1,10 @@
 import React from "react";
 import { Box, Text } from "ink";
 import type { Msg } from "../types.js";
-import { Message, getMessageStyle } from "./Message.js";
+import { Message, formatMessageRows, getMessageStyle } from "./Message.js";
 import { formatToolCallLine } from "./ToolCall.js";
 import type { ResolvedTuiTheme } from "../theme/index.js";
-import { textWidth } from "./text-width.js";
+import { textWidth, wrapTextLine } from "./text-width.js";
 
 export type ConversationEntry =
   | { id: string; kind: "message"; msg: Msg }
@@ -21,20 +21,11 @@ export function buildConversationEntries(messages: Msg[], streaming: string | nu
 
 export function estimateWrappedLineCount(text: string, width: number): number {
   const wrapWidth = Math.max(1, width);
-  return text.split(/\r?\n/u).reduce((total, line) => {
-    const length = textWidth(line);
-    return total + Math.max(1, Math.ceil(length / wrapWidth));
-  }, 0);
+  return text.split(/\r?\n/u).reduce((total, line) => total + wrapTextLine(line, wrapWidth).length, 0);
 }
 
 function estimateLabeledTextRows(label: string, text: string, width: number): number {
-  const contentWidth = Math.max(1, width - 2 - textWidth(label) - 1);
-  const [first = "", ...rest] = text.split(/\r?\n/u);
-
-  return (
-    estimateWrappedLineCount(first, contentWidth) +
-    rest.reduce((total, line) => total + estimateWrappedLineCount(line, contentWidth), 0)
-  );
+  return formatMessageRows(text, label, width).length;
 }
 
 export function estimateConversationEntryRows(entry: ConversationEntry, width: number): number {

@@ -33,6 +33,32 @@ export function textWidth(value: string): number {
   return Array.from(value).reduce((width, char) => width + charWidth(char), 0);
 }
 
+export function wrapTextLine(line: string, width: number): string[] {
+  const wrapWidth = Math.max(1, width);
+  if (line.length === 0) {
+    return [""];
+  }
+
+  const rows: string[] = [];
+  let row = "";
+  let rowWidth = 0;
+
+  for (const char of Array.from(line)) {
+    const nextWidth = rowWidth + charWidth(char);
+    if (row.length > 0 && nextWidth > wrapWidth) {
+      rows.push(row);
+      row = char;
+      rowWidth = charWidth(char);
+    } else {
+      row += char;
+      rowWidth = nextWidth;
+    }
+  }
+
+  rows.push(row);
+  return rows;
+}
+
 export function truncateEnd(value: string, maxWidth: number, suffix = "…"): string {
   if (maxWidth <= 0) {
     return "";

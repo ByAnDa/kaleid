@@ -4,7 +4,7 @@ import { ToolCall } from "./ToolCall.js";
 import { RoleGutter } from "./RoleGutter.js";
 import type { Msg } from "../types.js";
 import { DEFAULT_RESOLVED_THEME, type ResolvedTuiTheme, type RoleTokenName } from "../theme/index.js";
-import { textWidth } from "./text-width.js";
+import { textWidth, wrapTextLine } from "./text-width.js";
 
 export interface MessageStyle {
   label: string;
@@ -41,6 +41,29 @@ export function getMessageStyle(role: Msg["role"], theme: ResolvedTuiTheme = DEF
   return { label: "error", color: token.fg, textColor, gutter: token.gutter };
 }
 
+export interface MessageRow {
+  label: string;
+  text: string;
+}
+
+export function formatMessageRows(text: string, label: string, width: number): MessageRow[] {
+  const firstLabel = `${label} `;
+  const indent = " ".repeat(textWidth(firstLabel));
+  const contentWidth = Math.max(1, width - 2 - textWidth(firstLabel));
+  const rows: MessageRow[] = [];
+
+  for (const line of text.split(/\r?\n/u)) {
+    for (const wrappedLine of wrapTextLine(line, contentWidth)) {
+      rows.push({
+        label: rows.length === 0 ? firstLabel : indent,
+        text: wrappedLine
+      });
+    }
+  }
+
+  return rows.length > 0 ? rows : [{ label: firstLabel, text: "" }];
+}
+
 export function Message({
   msg,
   theme,
@@ -55,24 +78,22 @@ export function Message({
   }
 
   const style = getMessageStyle(msg.role, theme);
-  const lines = msg.text.split(/\r?\n/u);
-  const indent = " ".repeat(style.label.length + 1);
   const lineWidth = Math.max(1, width ?? 80);
+  const rows = formatMessageRows(msg.text, style.label, lineWidth);
 
   return (
     <Box flexDirection="column" width={width}>
-      {lines.map((line, index) => {
-        const label = index === 0 ? `${style.label} ` : indent;
-        const fill = " ".repeat(Math.max(0, lineWidth - 2 - textWidth(label) - textWidth(line)));
+      {rows.map((row, index) => {
+        const fill = " ".repeat(Math.max(0, lineWidth - 2 - textWidth(row.label) - textWidth(row.text)));
         return (
           <Box key={index} flexDirection="row" width={width}>
             <RoleGutter color={style.gutter} theme={theme} />
             <Text backgroundColor={theme.surface.canvas}> </Text>
             <Text backgroundColor={theme.surface.canvas} color={style.color} dimColor={style.dimColor}>
-              <Text bold={style.bold}>{label}</Text>
+              <Text bold={style.bold}>{row.label}</Text>
             </Text>
             <Text backgroundColor={theme.surface.canvas} color={style.textColor}>
-              {line}
+              {row.text}
               {fill}
             </Text>
           </Box>
