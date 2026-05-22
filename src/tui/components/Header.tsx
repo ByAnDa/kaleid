@@ -5,7 +5,7 @@ import type { ResolvedTuiTheme } from "../theme/index.js";
 import { ProjectBadge, TagBadge } from "./Badges.js";
 
 export const HEADER_HEIGHT = 7;
-const VERSION_LABEL = "v0.0.13";
+const VERSION_LABEL = "v0.0.14";
 export const LOGO_LINES = ["   ◆   ", "  ◆◇◆  ", " ◆◇◆◇◆ ", "  ◆◇◆  ", "   ◆   "] as const;
 
 export interface HeaderProps {

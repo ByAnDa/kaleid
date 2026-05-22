@@ -785,7 +785,7 @@ test("TUI header and option selector format model and reasoning state", () => {
   assert.equal(formatHeaderState("kimi-for-coding", null, "kimi"), "kimi-for-coding [kimi] · -");
   assert.equal(truncateHeaderState("gpt-5.5-pro · medium", 12), "gpt-5.5-p...");
   const welcomeIntro = buildWelcomeIntroText("gpt-5.5", "high");
-  assert.match(welcomeIntro, /^   ◆     kaleid v0\.0\.13 · gpt-5\.5 · high/u);
+  assert.match(welcomeIntro, /^   ◆     kaleid v0\.0\.14 · gpt-5\.5 · high/u);
   assert.match(welcomeIntro, /◆◇◆/u);
   assert.equal(welcomeIntro.split("\n").length, 5);
   assert.equal(getOptionSelectorHeight(5), 8);
