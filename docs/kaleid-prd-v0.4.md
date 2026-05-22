@@ -170,6 +170,9 @@ Reviewer: ByAnDa
 ### spec-018 — resume project/label 筛选（待审核）
 - resume 选择器顶部加筛选栏 project（默认全部）+ label（默认全部）；选中进入对应列表选一个后返回、只显示该 project/label 的对话；两维 AND；选"全部"清除。详见 `kaleid spec-018 resume-filter.md`。
 
+### spec-019 — 命令无参进入交互输入（待审核）
+- `/rename` 无参时进入交互输入态（预填当前名、可 项目/名称），不只靠后置参数；/project //chatlabel 已是 combobox（无参进交互）。三命令一致：无参进交互、带参直接设。详见 `kaleid spec-019 command-interactive-input.md`。
+
 ### spec-014 — 单对话记忆（0.0.8）
 - **token 常显输入框下方**：`ctx used / window · pct%`（当前上下文 / 最大窗口 / 百分比），接近上限变色。
 - **自动压缩**（pi 式）：token > 窗口 - reserve → LLM 总结旧历史、保留最近 ~keepRecent，replace 为摘要。
