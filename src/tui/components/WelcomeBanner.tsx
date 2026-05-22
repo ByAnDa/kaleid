@@ -4,7 +4,7 @@ import { providerLabel, type ProviderId, type ReasoningEffort } from "../../prov
 import type { ResolvedTuiTheme } from "../theme/index.js";
 import { textWidth, truncateEnd } from "./text-width.js";
 
-export const VERSION_LABEL = "v0.0.14";
+export const VERSION_LABEL = "v0.0.15";
 export const LOGO_LINES = ["   ◆   ", "  ◆◇◆  ", " ◆◇◆◇◆ ", "  ◆◇◆  ", "   ◆   "] as const;
 export const WELCOME_BANNER_ROWS = LOGO_LINES.length;
 
