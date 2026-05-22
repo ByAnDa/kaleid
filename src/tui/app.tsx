@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Box, Text, useApp, useInput } from "ink";
+import { Box, useApp, useInput } from "ink";
 import { saveApiKey, type ApiKeyProviderId } from "../auth/config-store.js";
 import type { runTurn as runTurnFn } from "../loop/agent-loop.js";
 import { buildSystemPrompt } from "../loop/system-prompt.js";
@@ -51,6 +51,7 @@ import {
   getOptionSelectorHeight,
   type OptionSelectorItem
 } from "./components/OptionSelector.js";
+import { ResumeSelector, getResumeSelectorHeight } from "./components/ResumeSelector.js";
 import {
   OptionCombobox,
   getOptionComboboxHeight,
@@ -68,7 +69,6 @@ import {
   type ResolvedTuiTheme,
   type ThemeMode
 } from "./theme/index.js";
-import { ProjectBadge, TagBadge } from "./components/Badges.js";
 
 export interface AppProps {
   model: string;
@@ -465,48 +465,6 @@ function useTerminalDimensions(): TerminalDimensions {
   return dimensions;
 }
 
-interface ResumeFilterBarProps {
-  filter: ResumeFilterState;
-  focus: ResumeFilterFocus;
-  theme: ResolvedTuiTheme;
-  width: number;
-}
-
-function ResumeFilterBar({ filter, focus, theme, width }: ResumeFilterBarProps): React.ReactElement {
-  const renderFilter = (kind: Exclude<ResumeFilterFocus, "sessions">, label: string, value: string | null) => {
-    const selected = focus === kind;
-    const text = `${label}: ${formatResumeFilterValue(value)}`;
-    return (
-      <>
-        <Text
-          backgroundColor={selected ? theme.selection.bg : theme.surface.panel}
-          color={selected ? theme.selection.fg : theme.accent.default}
-        >
-          {text}
-        </Text>
-        {value ? (
-          <>
-            <Text backgroundColor={theme.surface.panel}> </Text>
-            {kind === "project" ? (
-              <ProjectBadge project={value} theme={theme} />
-            ) : (
-              <TagBadge label={value} theme={theme} />
-            )}
-          </>
-        ) : null}
-      </>
-    );
-  };
-
-  return (
-    <Box flexShrink={0} paddingX={1} width={width}>
-      {renderFilter("project", "project", filter.project)}
-      <Text backgroundColor={theme.surface.panel}>  </Text>
-      {renderFilter("label", "label", filter.label)}
-    </Box>
-  );
-}
-
 export function App({
   model,
   cwd,
@@ -630,12 +588,19 @@ export function App({
   const selectedSelectorIndex =
     selectorOptions.length === 0 ? -1 : Math.min(selectorIndex, selectorOptions.length - 1);
   const selectorVisible = activeSelector !== null;
-  const selectorHeight = selectorVisible ? getOptionSelectorHeight(selectorOptions.length) : 0;
+  const resumeSelectorVisible =
+    activeSelector === "resume" || activeSelector === "resumeProjectFilter" || activeSelector === "resumeLabelFilter";
+  const genericSelectorVisible = selectorVisible && !resumeSelectorVisible;
+  const resumeRows = useMemo(() => filterSessions(resumeSessions, resumeFilter), [resumeFilter, resumeSessions]);
+  const selectorHeight = resumeSelectorVisible
+    ? getResumeSelectorHeight(resumeRows.length, activeSelector !== "resume")
+    : genericSelectorVisible
+      ? getOptionSelectorHeight(selectorOptions.length)
+      : 0;
   const comboboxVisible = activeCombobox !== null;
   const selectedComboboxIndex =
     comboboxOptions.length === 0 ? -1 : Math.min(comboboxIndex, comboboxOptions.length - 1);
   const comboboxHeight = comboboxVisible ? getOptionComboboxHeight(comboboxOptions.length, comboboxInput) : 0;
-  const resumeFilterHeight = activeSelector === "resume" ? 1 : 0;
   const inputBarHeight = getInputBarHeight({
     input,
     inputWidth: Math.max(1, terminal.columns - 12),
@@ -646,7 +611,7 @@ export function App({
   });
   const conversationHeight = Math.max(
     1,
-    terminal.rows - HEADER_HEIGHT - resumeFilterHeight - selectorHeight - comboboxHeight - inputBarHeight
+    terminal.rows - HEADER_HEIGHT - selectorHeight - comboboxHeight - inputBarHeight
   );
 
   const commit = useCallback((msg: Msg) => {
@@ -1687,27 +1652,33 @@ export function App({
         theme={theme}
         width={terminal.columns}
       />
-      {activeSelector === "resume" ? (
-        <ResumeFilterBar filter={resumeFilter} focus={resumeFocus} theme={theme} width={terminal.columns} />
+      {resumeSelectorVisible ? (
+        <ResumeSelector
+          activeFilter={
+            activeSelector === "resumeProjectFilter" ? "project" : activeSelector === "resumeLabelFilter" ? "label" : null
+          }
+          filterFocus={resumeFocus}
+          filterSelectedIndex={selectedSelectorIndex}
+          labelOptions={resumeLabelFilterOptions}
+          projectOptions={resumeProjectFilterOptions}
+          selectedIndex={activeSelector === "resume" && resumeFocus === "sessions" ? selectedSelectorIndex : -1}
+          sessions={resumeRows}
+          theme={theme}
+          width={terminal.columns}
+        />
       ) : null}
-      {selectorVisible ? (
+      {genericSelectorVisible ? (
         <OptionSelector
           options={selectorOptions}
-          selectedIndex={activeSelector === "resume" && resumeFocus !== "sessions" ? -1 : selectedSelectorIndex}
+          selectedIndex={selectedSelectorIndex}
           title={
             activeSelector === "model"
               ? "Select model"
               : activeSelector === "login"
                 ? "Select provider"
-                : activeSelector === "resume"
-                  ? "Resume session"
-                  : activeSelector === "resumeProjectFilter"
-                    ? "Filter project"
-                    : activeSelector === "resumeLabelFilter"
-                      ? "Filter label"
-                      : activeSelector === "theme"
-                        ? "Select theme"
-                        : "Select reasoning effort"
+                : activeSelector === "theme"
+                  ? "Select theme"
+                  : "Select reasoning effort"
           }
           theme={theme}
           width={terminal.columns}

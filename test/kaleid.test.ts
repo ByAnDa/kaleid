@@ -96,6 +96,11 @@ import {
 } from "../src/tui/components/MultilineInput.js";
 import { formatOptionComboboxLine, getOptionComboboxHeight } from "../src/tui/components/OptionCombobox.js";
 import { formatOptionSelectorLine, getOptionSelectorHeight } from "../src/tui/components/OptionSelector.js";
+import {
+  formatResumeActivity,
+  formatResumeFilterChipLabel,
+  getResumeSelectorHeight
+} from "../src/tui/components/ResumeSelector.js";
 import { formatToolCallLine } from "../src/tui/components/ToolCall.js";
 import {
   DEFAULT_RESOLVED_THEME,
@@ -539,17 +544,20 @@ test("TUI message labels and tool calls use distinct visual roles", () => {
   assert.deepEqual(getMessageStyle("user"), {
     label: "you",
     color: theme.role.user.fg,
+    textColor: theme.text.primary,
     gutter: theme.role.user.gutter,
     bold: true
   });
   assert.deepEqual(getMessageStyle("assistant"), {
     label: "kaleid",
     color: theme.role.assistant.fg,
+    textColor: theme.text.primary,
     gutter: theme.role.assistant.gutter
   });
   assert.deepEqual(getMessageStyle("system"), {
     label: "system",
     color: theme.role.system.fg,
+    textColor: theme.text.primary,
     gutter: theme.role.system.gutter,
     dimColor: true
   });
@@ -750,6 +758,8 @@ test("TUI header and option selector format model and reasoning state", () => {
   assert.equal(formatHeaderState("kimi-for-coding", null, "kimi"), "kimi-for-coding [kimi] · -");
   assert.equal(truncateHeaderState("gpt-5.5-pro · medium", 12), "gpt-5.5-p...");
   assert.equal(getOptionSelectorHeight(5), 8);
+  assert.equal(getResumeSelectorHeight(5), 8);
+  assert.equal(getResumeSelectorHeight(5, true), 9);
   assert.equal(getOptionComboboxHeight(3, ""), 7);
   assert.equal(getOptionComboboxHeight(3, "new"), 4);
   assert.equal(
@@ -764,6 +774,12 @@ test("TUI header and option selector format model and reasoning state", () => {
   assert.equal(
     formatOptionSelectorLine({ id: "session_1", display: "kaleid - 修复登录", current: false }, false),
     "    kaleid - 修复登录"
+  );
+  assert.equal(formatResumeFilterChipLabel({ id: CLEAR_RESUME_FILTER_OPTION_ID, display: "全部", current: true }, "project"), "all");
+  assert.equal(formatResumeFilterChipLabel({ id: "review", current: false }, "label"), "#review");
+  assert.equal(
+    formatResumeActivity({ messageCount: 12, updatedAt: "2026-05-22T12:00:00.000Z" }, Date.parse("2026-05-22T14:30:00.000Z")),
+    "12 msgs · 2h"
   );
   assert.deepEqual(
     resumeToOption({

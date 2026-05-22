@@ -8,6 +8,7 @@ import { DEFAULT_RESOLVED_THEME, type ResolvedTuiTheme, type RoleTokenName } fro
 export interface MessageStyle {
   label: string;
   color: string;
+  textColor: string;
   gutter: string;
   bold?: boolean;
   dimColor?: boolean;
@@ -19,23 +20,24 @@ function roleTokenName(role: Msg["role"]): RoleTokenName {
 
 export function getMessageStyle(role: Msg["role"], theme: ResolvedTuiTheme = DEFAULT_RESOLVED_THEME): MessageStyle {
   const token = theme.role[roleTokenName(role)];
+  const textColor = theme.text.primary;
   if (role === "user") {
-    return { label: "you", color: token.fg, gutter: token.gutter, bold: true };
+    return { label: "you", color: token.fg, textColor, gutter: token.gutter, bold: true };
   }
 
   if (role === "assistant") {
-    return { label: "kaleid", color: token.fg, gutter: token.gutter };
+    return { label: "kaleid", color: token.fg, textColor, gutter: token.gutter };
   }
 
   if (role === "tool") {
-    return { label: "tool", color: token.fg, gutter: token.gutter };
+    return { label: "tool", color: token.fg, textColor, gutter: token.gutter };
   }
 
   if (role === "system") {
-    return { label: "system", color: token.fg, gutter: token.gutter, dimColor: true };
+    return { label: "system", color: token.fg, textColor, gutter: token.gutter, dimColor: true };
   }
 
-  return { label: "error", color: token.fg, gutter: token.gutter };
+  return { label: "error", color: token.fg, textColor, gutter: token.gutter };
 }
 
 function textLength(value: string): number {
@@ -71,6 +73,8 @@ export function Message({
             <Text backgroundColor={theme.surface.canvas}> </Text>
             <Text backgroundColor={theme.surface.canvas} color={style.color} dimColor={style.dimColor}>
               <Text bold={style.bold}>{label}</Text>
+            </Text>
+            <Text backgroundColor={theme.surface.canvas} color={style.textColor}>
               {line}
               {fill}
             </Text>
