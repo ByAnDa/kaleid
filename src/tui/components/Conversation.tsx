@@ -1,5 +1,5 @@
 import React from "react";
-import { Box } from "ink";
+import { Box, Text } from "ink";
 import type { Msg } from "../types.js";
 import { Message, getMessageStyle } from "./Message.js";
 import { formatToolCallLine } from "./ToolCall.js";
@@ -139,20 +139,28 @@ export interface ConversationProps {
 }
 
 export function Conversation({ messages, streaming, height, theme, width }: ConversationProps): React.ReactElement {
-  const entries = getVisibleConversationEntries(buildConversationEntries(messages, streaming), height, width - 2);
+  const entries = getVisibleConversationEntries(buildConversationEntries(messages, streaming), height, width);
+  const usedRows = entries.reduce((total, entry) => total + estimateConversationEntryRows(entry, width), 0);
+  const emptyRows = Math.max(0, height - usedRows);
+  const fill = " ".repeat(Math.max(1, width));
 
   return (
-    <Box flexDirection="column" flexGrow={1} height={height} overflow="hidden" paddingX={1} width={width}>
+    <Box flexDirection="column" flexGrow={1} height={height} overflow="hidden" width={width}>
+      {Array.from({ length: emptyRows }, (_, index) => (
+        <Text key={`empty-${index}`} backgroundColor={theme.surface.canvas}>
+          {fill}
+        </Text>
+      ))}
       {entries.map((entry) =>
         entry.kind === "streaming" ? (
           <Message
             key={entry.id}
             msg={{ id: entry.id, role: "assistant", text: entry.text }}
             theme={theme}
-            width={width - 2}
+            width={width}
           />
         ) : (
-          <Message key={entry.id} msg={entry.msg} theme={theme} width={width - 2} />
+          <Message key={entry.id} msg={entry.msg} theme={theme} width={width} />
         )
       )}
     </Box>

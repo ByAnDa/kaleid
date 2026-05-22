@@ -6,7 +6,7 @@ import type { ResolvedTuiTheme } from "../theme/index.js";
 export function StatusLine({ status, theme }: { status: string; theme: ResolvedTuiTheme }): React.ReactElement {
   return (
     <Box>
-      <Text color={theme.status.warn}>
+      <Text backgroundColor={theme.surface.canvas} color={theme.status.warn}>
         <Spinner type="dots" /> {status}
       </Text>
     </Box>

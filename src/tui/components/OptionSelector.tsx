@@ -48,11 +48,13 @@ export function OptionSelector({
       paddingX={1}
       width={width}
     >
-      <Text bold color={theme.accent.primary}>
+      <Text backgroundColor={theme.surface.raised} bold color={theme.accent.primary}>
         {title}
       </Text>
       {options.length === 0 ? (
-        <Text color={theme.status.warn}>No options</Text>
+        <Text backgroundColor={theme.surface.raised} color={theme.status.warn}>
+          No options
+        </Text>
       ) : (
         options.map((option, index) => {
           const selected = index === selectedIndex;
@@ -66,7 +68,7 @@ export function OptionSelector({
           return (
             <Text
               key={option.id}
-              backgroundColor={selected && !option.disabled ? theme.selection.bg : undefined}
+              backgroundColor={selected && !option.disabled ? theme.selection.bg : theme.surface.raised}
               color={color}
             >
               {formatOptionSelectorLine(option, selected)}

@@ -58,24 +58,26 @@ export function OptionCombobox({
       paddingX={1}
       width={width}
     >
-      <Text bold color={theme.accent.primary}>
+      <Text backgroundColor={theme.surface.raised} bold color={theme.accent.primary}>
         {title}
       </Text>
       <Box flexDirection="row">
-        <Text bold color={theme.accent.primary}>
+        <Text backgroundColor={theme.surface.raised} bold color={theme.accent.primary}>
           ›{" "}
         </Text>
         <TextInput value={input} onChange={onChange} onSubmit={onSubmit} />
       </Box>
       {!typing && options.length === 0 ? (
-        <Text color={theme.status.warn}>No options</Text>
+        <Text backgroundColor={theme.surface.raised} color={theme.status.warn}>
+          No options
+        </Text>
       ) : !typing ? (
         options.map((option, index) => {
           const selected = index === selectedIndex;
           return (
             <Text
               key={option.id}
-              backgroundColor={selected ? theme.selection.bg : undefined}
+              backgroundColor={selected ? theme.selection.bg : theme.surface.raised}
               color={selected ? theme.selection.fg : option.current ? theme.text.primary : theme.text.muted}
             >
               {formatOptionComboboxLine(option, selected)}

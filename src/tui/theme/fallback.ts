@@ -1,4 +1,11 @@
-import type { BadgeColorTokens, ResolvedTuiTheme, TerminalColorLevel, ThemeColorTokens, TuiTheme } from "./tokens.js";
+import type {
+  BadgeColorTokens,
+  ResolvedTuiTheme,
+  TerminalColorLevel,
+  ThemeColorTokens,
+  ThemeName,
+  TuiTheme
+} from "./tokens.js";
 
 const ANSI16_COLORS: Record<string, string> = {
   black: "#000000",
@@ -13,6 +20,111 @@ const ANSI16_COLORS: Record<string, string> = {
 };
 
 const ANSI256_LEVELS = [0, 95, 135, 175, 215, 255] as const;
+
+const ANSI16_SEMANTIC_THEMES: Record<ThemeName, ThemeColorTokens> = {
+  daylight: {
+    surface: {
+      canvas: "white",
+      panel: "white",
+      raised: "white",
+      chrome: "black"
+    },
+    text: {
+      primary: "black",
+      secondary: "black",
+      muted: "gray",
+      subtle: "gray",
+      faint: "gray",
+      onChrome: "white"
+    },
+    border: {
+      strong: "gray",
+      default: "gray",
+      subtle: "white"
+    },
+    accent: {
+      primary: "cyan",
+      secondary: "magenta",
+      quiet: "white"
+    },
+    role: {
+      system: { fg: "gray", gutter: "gray" },
+      user: { fg: "cyan", gutter: "cyan" },
+      assistant: { fg: "blue", gutter: "blue" },
+      tool: { fg: "yellow", gutter: "yellow" },
+      error: { fg: "red", gutter: "red" }
+    },
+    status: {
+      ok: "green",
+      warn: "yellow",
+      err: "red",
+      info: "blue"
+    },
+    tag: {
+      review: { bg: "red", fg: "white" },
+      wip: { bg: "yellow", fg: "black" },
+      design: { bg: "magenta", fg: "white" },
+      infra: { bg: "cyan", fg: "black" },
+      planning: { bg: "green", fg: "black" },
+      refactor: { bg: "blue", fg: "white" },
+      docs: { bg: "white", fg: "blue" },
+      inbox: { bg: "gray", fg: "white" }
+    },
+    project: { bg: "black", fg: "white" },
+    selection: { bg: "cyan", fg: "black" }
+  },
+  spectrum: {
+    surface: {
+      canvas: "black",
+      panel: "black",
+      raised: "gray",
+      chrome: "white"
+    },
+    text: {
+      primary: "white",
+      secondary: "white",
+      muted: "gray",
+      subtle: "gray",
+      faint: "gray",
+      onChrome: "black"
+    },
+    border: {
+      strong: "gray",
+      default: "gray",
+      subtle: "black"
+    },
+    accent: {
+      primary: "cyan",
+      secondary: "magenta",
+      quiet: "black"
+    },
+    role: {
+      system: { fg: "gray", gutter: "gray" },
+      user: { fg: "cyan", gutter: "cyan" },
+      assistant: { fg: "blue", gutter: "blue" },
+      tool: { fg: "yellow", gutter: "yellow" },
+      error: { fg: "red", gutter: "red" }
+    },
+    status: {
+      ok: "green",
+      warn: "yellow",
+      err: "red",
+      info: "blue"
+    },
+    tag: {
+      review: { bg: "red", fg: "white" },
+      wip: { bg: "yellow", fg: "black" },
+      design: { bg: "magenta", fg: "white" },
+      infra: { bg: "cyan", fg: "black" },
+      planning: { bg: "green", fg: "black" },
+      refactor: { bg: "blue", fg: "white" },
+      docs: { bg: "white", fg: "blue" },
+      inbox: { bg: "gray", fg: "white" }
+    },
+    project: { bg: "cyan", fg: "black" },
+    selection: { bg: "cyan", fg: "black" }
+  }
+};
 
 function hexToRgb(hex: string): [number, number, number] | null {
   const match = /^#?([0-9a-f]{6})$/iu.exec(hex);
@@ -112,6 +224,15 @@ export function resolveThemeColor(hex: string, colorLevel: TerminalColorLevel): 
 }
 
 export function resolveTheme(theme: TuiTheme, colorLevel: TerminalColorLevel, mode: ResolvedTuiTheme["mode"]): ResolvedTuiTheme {
+  if (colorLevel === "ansi16") {
+    return {
+      ...ANSI16_SEMANTIC_THEMES[theme.name],
+      name: theme.name,
+      mode,
+      colorLevel
+    };
+  }
+
   const map = (hex: string) => resolveThemeColor(hex, colorLevel);
   const tokens: ThemeColorTokens = {
     surface: {

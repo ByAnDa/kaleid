@@ -5,7 +5,7 @@ import { SlashMenu } from "./SlashMenu.js";
 import { StatusLine } from "./StatusLine.js";
 import type { TokenState } from "../../loop/session.js";
 import type { ResolvedTuiTheme } from "../theme/index.js";
-import { MultilineInput, getMultilineInputRows } from "./MultilineInput.js";
+import { MULTILINE_INPUT_NEWLINE_HINT, MultilineInput, getMultilineInputRows } from "./MultilineInput.js";
 
 export interface InputBarLayoutState {
   input?: string;
@@ -148,13 +148,17 @@ export function InputBar({
   const label = truncateConversationLabel(conversationLabel, labelMaxWidth);
   const inputRows = getMultilineInputRows(input, Math.max(1, width - prompt.length - label.length - 8));
   const inputWidth = Math.max(1, width - label.length - 6);
+  const tokenStatus = formatTokenStatus(tokenState);
+  const footerGap = " ".repeat(Math.max(0, width - 2 - textWidth(tokenStatus) - textWidth(MULTILINE_INPUT_NEWLINE_HINT)));
 
   return (
     <Box flexDirection="column" flexShrink={0} width={width}>
       {status ? <StatusLine status={status} theme={theme} /> : null}
       {manualCodePrompt ? (
         <Box paddingX={1}>
-          <Text color={theme.status.warn}>{manualCodePrompt}</Text>
+          <Text backgroundColor={theme.surface.canvas} color={theme.status.warn}>
+            {manualCodePrompt}
+          </Text>
         </Box>
       ) : null}
       {slashMenuVisible ? (
@@ -170,7 +174,7 @@ export function InputBar({
         <Box flexDirection="row" width="100%">
           <Box flexGrow={1} minWidth={0} width={inputWidth}>
             {disabled ? (
-              <Text color={theme.text.muted}>
+              <Text backgroundColor={theme.surface.panel} color={theme.text.muted}>
                 <Text bold color={promptColor}>
                   {prompt}
                 </Text>
@@ -198,9 +202,13 @@ export function InputBar({
         </Box>
       </Box>
       <Box paddingX={1}>
-        <Text color={tokenState.warning ? theme.status.warn : theme.text.muted}>{formatTokenStatus(tokenState)}</Text>
-        <Box flexGrow={1} />
-        <Text color={theme.text.faint}>Enter send · Alt+Enter/Ctrl+J newline</Text>
+        <Text backgroundColor={theme.surface.canvas} color={tokenState.warning ? theme.status.warn : theme.text.muted}>
+          {tokenStatus}
+        </Text>
+        <Text backgroundColor={theme.surface.canvas}>{footerGap}</Text>
+        <Text backgroundColor={theme.surface.canvas} color={theme.text.faint}>
+          {MULTILINE_INPUT_NEWLINE_HINT}
+        </Text>
       </Box>
     </Box>
   );

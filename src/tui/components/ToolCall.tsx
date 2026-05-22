@@ -45,6 +45,10 @@ export function formatToolCallLine(tool: ToolCallView, width = 80): string {
   return `${parts.invocation} ${parts.status} ${parts.summary}`;
 }
 
+function textLength(value: string): number {
+  return Array.from(value).length;
+}
+
 export function ToolCall({
   theme,
   tool,
@@ -55,17 +59,22 @@ export function ToolCall({
   width?: number;
 }): React.ReactElement {
   const parts = formatToolCallParts(tool, width);
+  const lineWidth = Math.max(1, width ?? 80);
+  const panelWidth = Math.max(1, lineWidth - 3);
+  const line = `${parts.invocation} ${parts.status} ${parts.summary}`;
+  const fill = " ".repeat(Math.max(0, panelWidth - textLength(line) - 2));
   return (
     <Box flexDirection="row" width={width}>
       <Text backgroundColor={theme.role.tool.gutter}>  </Text>
-      <Text> </Text>
-      <Box flexGrow={1} paddingX={1}>
-        <Text backgroundColor={theme.surface.raised}>
-          <Text color={theme.role.tool.fg}>{parts.invocation}</Text>{" "}
-          <Text color={tool.isError ? theme.status.err : theme.status.ok}>{parts.status}</Text>{" "}
-          <Text color={tool.isError ? theme.status.err : theme.text.muted}>{parts.summary}</Text>
-        </Text>
-      </Box>
+      <Text backgroundColor={theme.surface.canvas}> </Text>
+      <Text backgroundColor={theme.surface.raised}>
+        {" "}
+        <Text color={theme.role.tool.fg}>{parts.invocation}</Text>{" "}
+        <Text color={tool.isError ? theme.status.err : theme.status.ok}>{parts.status}</Text>{" "}
+        <Text color={tool.isError ? theme.status.err : theme.text.muted}>{parts.summary}</Text>
+        {" "}
+        {fill}
+      </Text>
     </Box>
   );
 }

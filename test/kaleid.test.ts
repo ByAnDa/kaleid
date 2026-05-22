@@ -87,7 +87,12 @@ import {
 import { formatHeaderState, truncateHeaderState } from "../src/tui/components/Header.js";
 import { formatTokenStatus, getInputBarHeight, truncateConversationLabel } from "../src/tui/components/InputBar.js";
 import { getMessageStyle } from "../src/tui/components/Message.js";
-import { getMultilineInputRows, shouldInsertInputNewline } from "../src/tui/components/MultilineInput.js";
+import {
+  MULTILINE_INPUT_NEWLINE_HINT,
+  getMultilineInputRows,
+  normalizeInputText,
+  shouldInsertInputNewline
+} from "../src/tui/components/MultilineInput.js";
 import { formatOptionComboboxLine, getOptionComboboxHeight } from "../src/tui/components/OptionCombobox.js";
 import { formatOptionSelectorLine, getOptionSelectorHeight } from "../src/tui/components/OptionSelector.js";
 import { formatToolCallLine } from "../src/tui/components/ToolCall.js";
@@ -580,6 +585,13 @@ test("TUI themes follow terminal appearance and fall back for low-color terminal
   assert.equal(lowColor.name, "spectrum");
   assert.doesNotMatch(lowColor.role.user.fg, /^#/u);
   assert.doesNotMatch(lowColor.tag.docs.bg, /^#/u);
+  assert.equal(new Set(Object.values(lowColor.tag).map((tag) => `${tag.bg}/${tag.fg}`)).size, 8);
+
+  const daylightLowColor = getResolvedTheme("daylight", "light", "ansi16");
+  assert.notEqual(daylightLowColor.role.tool.fg, daylightLowColor.role.error.fg);
+  assert.notEqual(daylightLowColor.status.warn, daylightLowColor.status.err);
+  assert.equal(daylightLowColor.surface.canvas, "white");
+  assert.equal(lowColor.surface.canvas, "black");
 });
 
 test("TUI header and option selector format model and reasoning state", () => {
@@ -842,9 +854,14 @@ test("TUI input footer reserves rows for status, slash menu, and OAuth paste mod
   assert.equal(truncateConversationLabel("abcdef", 2), "..");
   assert.equal(getMultilineInputRows("one\ntwo", 80), 2);
   assert.equal(getMultilineInputRows("x\nx\nx\nx\nx\nx\nx", 80), 6);
+  assert.equal(MULTILINE_INPUT_NEWLINE_HINT, "Enter send · Ctrl+J newline");
   assert.equal(shouldInsertInputNewline("j", { ctrl: true }), true);
   assert.equal(shouldInsertInputNewline("", { meta: true, return: true }), true);
+  assert.equal(shouldInsertInputNewline("\n", {}), true);
+  assert.equal(shouldInsertInputNewline("\u001b\r", {}), true);
   assert.equal(shouldInsertInputNewline("", { return: true }), false);
+  assert.equal(shouldInsertInputNewline("\r", { return: true }), false);
+  assert.equal(normalizeInputText("a\rb"), "a\nb");
 });
 
 test("OAuth helpers decode account ids and refresh via mocked token endpoint", async () => {

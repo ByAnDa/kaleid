@@ -37,6 +37,10 @@ export function getMessageStyle(role: Msg["role"], theme: ResolvedTuiTheme = DEF
   return { label: "error ›", color: token.fg, gutter: token.gutter };
 }
 
+function textLength(value: string): number {
+  return Array.from(value).length;
+}
+
 export function Message({
   msg,
   theme,
@@ -53,19 +57,25 @@ export function Message({
   const style = getMessageStyle(msg.role, theme);
   const lines = msg.text.split(/\r?\n/u);
   const indent = " ".repeat(style.label.length + 1);
+  const lineWidth = Math.max(1, width ?? 80);
 
   return (
     <Box flexDirection="column" width={width}>
-      {lines.map((line, index) => (
-        <Box key={index} flexDirection="row" width={width}>
-          <Text backgroundColor={style.gutter}>  </Text>
-          <Text> </Text>
-          <Text color={style.color} dimColor={style.dimColor}>
-            <Text bold={style.bold}>{index === 0 ? `${style.label} ` : indent}</Text>
-            {line}
-          </Text>
-        </Box>
-      ))}
+      {lines.map((line, index) => {
+        const label = index === 0 ? `${style.label} ` : indent;
+        const fill = " ".repeat(Math.max(0, lineWidth - 3 - textLength(label) - textLength(line)));
+        return (
+          <Box key={index} flexDirection="row" width={width}>
+            <Text backgroundColor={style.gutter}>  </Text>
+            <Text backgroundColor={theme.surface.canvas}> </Text>
+            <Text backgroundColor={theme.surface.canvas} color={style.color} dimColor={style.dimColor}>
+              <Text bold={style.bold}>{label}</Text>
+              {line}
+              {fill}
+            </Text>
+          </Box>
+        );
+      })}
     </Box>
   );
 }

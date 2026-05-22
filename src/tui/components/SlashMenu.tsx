@@ -13,7 +13,9 @@ export function SlashMenu({ commands, selectedIndex, theme }: SlashMenuProps): R
   if (commands.length === 0) {
     return (
       <Box marginLeft={2}>
-        <Text color={theme.status.warn}>No matching slash commands</Text>
+        <Text backgroundColor={theme.surface.raised} color={theme.status.warn}>
+          No matching slash commands
+        </Text>
       </Box>
     );
   }
@@ -25,7 +27,7 @@ export function SlashMenu({ commands, selectedIndex, theme }: SlashMenuProps): R
         return (
           <Text
             key={command.command}
-            backgroundColor={selected ? theme.selection.bg : undefined}
+            backgroundColor={selected ? theme.selection.bg : theme.surface.raised}
             color={selected ? theme.selection.fg : theme.text.muted}
           >
             {selected ? "> " : "  "}

@@ -3,6 +3,7 @@ import { Box, Text, useInput } from "ink";
 import type { ResolvedTuiTheme } from "../theme/index.js";
 
 export const MAX_MULTILINE_INPUT_ROWS = 6;
+export const MULTILINE_INPUT_NEWLINE_HINT = "Enter send · Ctrl+J newline";
 
 export interface MultilineInputProps {
   disabled: boolean;
@@ -66,6 +67,10 @@ function insertCursor(value: string, cursor: number): string {
   return `${value.slice(0, cursor)}|${value.slice(cursor)}`;
 }
 
+function textLength(value: string): number {
+  return Array.from(value).length;
+}
+
 export function getMultilineInputRows(value: string, width: number): number {
   const wrapWidth = Math.max(1, width);
   const rows = value.split("\n").reduce((total, line) => {
@@ -75,8 +80,29 @@ export function getMultilineInputRows(value: string, width: number): number {
   return clamp(rows, 1, MAX_MULTILINE_INPUT_ROWS);
 }
 
+export function normalizeInputText(value: string): string {
+  return value.replace(/\u001b(?=\r|\n)/gu, "").replace(/\r\n?/gu, "\n");
+}
+
+export function getInputNewline(value: string, key: { ctrl?: boolean; meta?: boolean; return?: boolean }): string | null {
+  if (key.meta === true && key.return === true) {
+    return "\n";
+  }
+
+  if (key.ctrl === true && value.toLowerCase() === "j") {
+    return "\n";
+  }
+
+  if (key.return === true) {
+    return null;
+  }
+
+  const normalized = normalizeInputText(value);
+  return normalized === "\n" ? "\n" : null;
+}
+
 export function shouldInsertInputNewline(value: string, key: { ctrl?: boolean; meta?: boolean; return?: boolean }): boolean {
-  return (key.meta === true && key.return === true) || (key.ctrl === true && value.toLowerCase() === "j");
+  return getInputNewline(value, key) !== null;
 }
 
 export function MultilineInput({
@@ -107,10 +133,11 @@ export function MultilineInput({
         return;
       }
 
-      if (shouldInsertInputNewline(input, key)) {
-        const next = `${value.slice(0, cursor)}\n${value.slice(cursor)}`;
+      const newline = getInputNewline(input, key);
+      if (newline) {
+        const next = `${value.slice(0, cursor)}${newline}${value.slice(cursor)}`;
         onChange(next);
-        setCursor(cursor + 1);
+        setCursor(cursor + newline.length);
         return;
       }
 
@@ -149,10 +176,11 @@ export function MultilineInput({
         return;
       }
 
-      if (input && !key.ctrl && !key.meta) {
-        const next = `${value.slice(0, cursor)}${input}${value.slice(cursor)}`;
+      const normalizedInput = normalizeInputText(input);
+      if (normalizedInput && !key.ctrl && !key.meta) {
+        const next = `${value.slice(0, cursor)}${normalizedInput}${value.slice(cursor)}`;
         onChange(next);
-        setCursor(cursor + input.length);
+        setCursor(cursor + normalizedInput.length);
       }
     },
     { isActive: !disabled }
@@ -161,16 +189,23 @@ export function MultilineInput({
   return (
     <Box flexDirection="column" minWidth={0} width={width}>
       {hiddenRows > 0 ? (
-        <Text color={theme.text.faint}>{`${promptIndent}... ${hiddenRows} earlier line${hiddenRows === 1 ? "" : "s"}`}</Text>
-      ) : null}
-      {visibleLines.map((line, index) => (
-        <Text key={index} color={theme.text.primary}>
-          <Text bold color={promptColor}>
-            {index === 0 ? prompt : promptIndent}
-          </Text>
-          {line}
+        <Text backgroundColor={theme.surface.panel} color={theme.text.faint}>
+          {`${promptIndent}... ${hiddenRows} earlier line${hiddenRows === 1 ? "" : "s"}`}
         </Text>
-      ))}
+      ) : null}
+      {visibleLines.map((line, index) => {
+        const visiblePrompt = index === 0 ? prompt : promptIndent;
+        const fill = " ".repeat(Math.max(0, width - textLength(visiblePrompt) - textLength(line)));
+        return (
+          <Text key={index} backgroundColor={theme.surface.panel} color={theme.text.primary}>
+            <Text bold color={promptColor}>
+              {visiblePrompt}
+            </Text>
+            {line}
+            {fill}
+          </Text>
+        );
+      })}
     </Box>
   );
 }

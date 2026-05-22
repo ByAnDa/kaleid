@@ -2,7 +2,7 @@ import React from "react";
 import { Box, Text } from "ink";
 import { providerLabel, type ProviderId, type ReasoningEffort } from "../../provider/models.js";
 import type { ResolvedTuiTheme } from "../theme/index.js";
-import { ProjectBadge, TagBadge } from "./Badges.js";
+import { ProjectBadge, TagBadge, formatBadgeText } from "./Badges.js";
 
 export const HEADER_HEIGHT = 4;
 
@@ -38,6 +38,10 @@ export function truncateHeaderState(value: string, maxWidth: number): string {
   return `${value.slice(0, maxWidth - 3)}...`;
 }
 
+function textLength(value: string): number {
+  return Array.from(value).length;
+}
+
 export function Header({
   labels,
   model,
@@ -55,6 +59,16 @@ export function Header({
   const visibleName = truncateHeaderState(name, Math.max(8, Math.min(28, width - 44)));
   const visibleProject = project ? truncateHeaderState(project, 16) : null;
   const visibleLabels = labels.slice(0, 2).map((label) => ({ key: label, value: truncateHeaderState(label, 12) }));
+  const innerWidth = Math.max(1, width - 4);
+  const titleText = "kaleid terminal coding harness";
+  const titleState = showState ? state : "";
+  const titleGap = " ".repeat(Math.max(0, innerWidth - textLength(titleText) - textLength(titleState)));
+  const contextWidth = showContext
+    ? textLength(visibleName) +
+      (visibleProject ? 1 + textLength(formatBadgeText(visibleProject)) : 0) +
+      visibleLabels.reduce((total, label) => total + 1 + textLength(formatBadgeText(`#${label.value}`)), 0)
+    : 0;
+  const contextGap = " ".repeat(Math.max(0, innerWidth - "welcome back".length - contextWidth));
 
   return (
     <Box
@@ -67,28 +81,38 @@ export function Header({
       width={width}
     >
       <Box flexDirection="row">
-        <Text bold color={theme.accent.primary}>
+        <Text backgroundColor={theme.surface.chrome} bold color={theme.text.onChrome}>
           kaleid
         </Text>
-        <Text color={theme.text.muted}> terminal coding harness</Text>
-        <Box flexGrow={1} />
-        {showState ? <Text color={theme.text.secondary}>{state}</Text> : null}
+        <Text backgroundColor={theme.surface.chrome} color={theme.text.onChrome}>
+          {" terminal coding harness"}
+          {titleGap}
+        </Text>
+        {showState ? (
+          <Text backgroundColor={theme.surface.chrome} color={theme.text.onChrome}>
+            {state}
+          </Text>
+        ) : null}
       </Box>
       <Box flexDirection="row">
-        <Text color={theme.text.muted}>welcome back</Text>
-        <Box flexGrow={1} />
+        <Text backgroundColor={theme.surface.chrome} color={theme.text.onChrome}>
+          welcome back
+          {contextGap}
+        </Text>
         {showContext ? (
           <>
-            <Text color={theme.text.secondary}>{visibleName}</Text>
+            <Text backgroundColor={theme.surface.chrome} color={theme.text.onChrome}>
+              {visibleName}
+            </Text>
             {visibleProject ? (
               <>
-                <Text> </Text>
+                <Text backgroundColor={theme.surface.chrome}> </Text>
                 <ProjectBadge project={visibleProject} theme={theme} />
               </>
             ) : null}
             {visibleLabels.map((label) => (
               <React.Fragment key={label.key}>
-                <Text> </Text>
+                <Text backgroundColor={theme.surface.chrome}> </Text>
                 <TagBadge label={label.value} theme={theme} />
               </React.Fragment>
             ))}

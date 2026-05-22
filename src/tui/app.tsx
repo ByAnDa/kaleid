@@ -479,14 +479,14 @@ function ResumeFilterBar({ filter, focus, theme, width }: ResumeFilterBarProps):
     return (
       <>
         <Text
-          backgroundColor={selected ? theme.selection.bg : undefined}
+          backgroundColor={selected ? theme.selection.bg : theme.surface.panel}
           color={selected ? theme.selection.fg : theme.accent.primary}
         >
           {text}
         </Text>
         {value ? (
           <>
-            <Text> </Text>
+            <Text backgroundColor={theme.surface.panel}> </Text>
             {kind === "project" ? (
               <ProjectBadge project={value} theme={theme} />
             ) : (
@@ -501,7 +501,7 @@ function ResumeFilterBar({ filter, focus, theme, width }: ResumeFilterBarProps):
   return (
     <Box flexShrink={0} paddingX={1} width={width}>
       {renderFilter("project", "project", filter.project)}
-      <Text>  </Text>
+      <Text backgroundColor={theme.surface.panel}>  </Text>
       {renderFilter("label", "label", filter.label)}
     </Box>
   );
