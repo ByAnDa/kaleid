@@ -133,7 +133,7 @@ Reviewer: ByAnDa
 ## 八、V1 后演进（spec-008~014，并入本 PRD）
 
 ### spec-023 — TUI 二轮精修（待审核）
-- 5 项：①底部状态信息行**右对齐**（仍单行不换行、对话名 `…` 截断）；②thinking/忙碌指示**独占一行**，不与状态信息同行；③对话区与底部状态行之间留白（约 1 空行）；④启动欢迎区**恢复上一版带 ◆◇◆ logo 的 banner 设计**（仍作对话首条随上滚消失，不回固定 Header）；⑤对话超过一屏时**鼠标滚轮上下翻动**（scrollback：开终端鼠标上报+SGR 解析+scrollOffset 窗口化+跟随/冻结，配键盘 PgUp/PgDn 后备；tmux 内 Shift+滚轮走原生回滚）。详见 `kaleid spec-023 tui-statusline-and-scroll.md`。
+- 4 项（原第 5 项"鼠标滚轮翻动"经 ByAnDa msg=f25ed83f 去掉）：①底部状态信息行**右对齐**（仍单行不换行、对话名 `…` 截断）；②thinking/忙碌指示**独占一行**，不与状态信息同行；③对话区与底部状态行之间留白（约 1 空行）；④启动欢迎区**恢复上一版带 ◆◇◆ logo 的 banner 设计**（仍作对话首条随上滚消失，不回固定 Header）。详见 `kaleid spec-023 tui-statusline-and-scroll.md`。
 
 ### spec-008 — REPL slash 命令（0.0.2，已发）
 - `/login` `/logout` `/exit` `/help`；输入 `/` 开头=命令否则 prompt；slash 在 TUI 内处理不发 LLM。
