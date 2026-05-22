@@ -120,9 +120,13 @@ Reviewer: ByAnDa
 | 0.0.4 | **全屏 TUI**（header/对话区/固定输入 + 消息区分 + 自研 diff renderer 防闪）| 010 |
 | 0.0.5 | `/model` 模型选择器 + `/reasoning` 推理强度 + header 显示 | 011 |
 | 0.0.6 | 模型清单对齐 pi + `/model` 选完链式选 effort | 012 |
-| 0.0.7 | **多 provider**：DeepSeek + Kimi + `/login` provider 选择器 | 013（进行中 BYW-109）|
-| 0.0.8 | **对话记忆**：token 显示 + 自动压缩 + /compact + 持久化/resume | 014（已写，待派）|
-| 远期 | tmux 全 pane context / Slack bot / bash sandbox / 富 TUI | - |
+| 0.0.7 | **多 provider**：DeepSeek + Kimi + `/login` provider 选择器 | 013 |
+| 0.0.8 | **对话记忆**：token 显示 + 自动压缩 + /compact + 持久化/resume | 014 |
+| 0.0.9 | bugfix 批：DeepSeek reasoning_content / Codex system 消息 / slash 双回车 | 015 |
+| 0.0.10 | `/rename` 对话命名 + 项目/对话两级 + 输入框右上角常显 | 016（BYW-112）|
+| 下一版 | `/project` 改项目 + `/chatlabel` 多标签 + 右上角合并显示 | 017（待审核）|
+| 远期 | tmux 全 pane context / Slack bot / bash sandbox / 富 TUI / skills | - |
+> 注：0.0.7~0.0.10 在 dev 累积，由 ByAnDa 实测后统一发布。
 
 ---
 
@@ -152,7 +156,18 @@ Reviewer: ByAnDa
 ### spec-013 — 多 provider：DeepSeek + Kimi（0.0.7，进行中 BYW-109）
 - 见 §九。`/login` 改 3 选项 provider 选择器；`/model` 只列已登录 provider 的模型。
 
-### spec-014 — 单对话记忆（0.0.8，已写待派）
+### spec-015 — 0.0.8 实测 bugfix 批（0.0.9）
+- ① DeepSeek `reasoning_content` 400：openai-compat 捕获 reasoning_content 并每条 assistant 回传（真值或 ""）。
+- ② OpenAI Codex `System messages are not allowed` 400：Responses `input` 不含 system 角色（system 只走 instructions）；compaction 摘要改 user 角色。
+- ③ slash 命令双回车：Enter 一次直接执行。
+
+### spec-016 — `/rename` + 项目/对话两级（0.0.10，BYW-112）
+- `/rename <名称>` 或 `/rename <项目>/<名称>`；会话两级 **项目 - 对话名称**（默认无项目）存 metadata；输入框右上角常显 `项目 - 名称`；resume 列表用 项目-名称 显示。
+
+### spec-017 — `/project` + `/chatlabel` 多标签（待审核）
+- `/project <名称>` 改/清当前对话 project；`/chatlabel <标签>` 加多标签（去重、可移除）；右上角合并常显 `项目 - 名称 + #标签`。详见 `kaleid spec-017 project-and-labels.md`。
+
+### spec-014 — 单对话记忆（0.0.8）
 - **token 常显输入框下方**：`ctx used / window · pct%`（当前上下文 / 最大窗口 / 百分比），接近上限变色。
 - **自动压缩**（pi 式）：token > 窗口 - reserve → LLM 总结旧历史、保留最近 ~keepRecent，replace 为摘要。
 - **`/compact`** 手动命令。
