@@ -2,7 +2,7 @@ import React from "react";
 import { Box, Text } from "ink";
 import type { SlashCommandDefinition } from "../commands.js";
 import { SlashMenu } from "./SlashMenu.js";
-import { StatusLine } from "./StatusLine.js";
+import { BusyLine, StatusLine } from "./StatusLine.js";
 import type { TokenState } from "../../loop/session.js";
 import type { ProviderId, ReasoningEffort } from "../../provider/models.js";
 import type { ResolvedTuiTheme } from "../theme/index.js";
@@ -34,12 +34,15 @@ function getPrompt(inputPrompt: string | undefined, manualCodePrompt: string | n
 }
 
 export function getInputBarHeight(state: InputBarLayoutState): number {
+  const conversationGapRows = 1;
+  const statusRows = 1;
+  const busyRows = state.status ? 1 : 0;
   const manualPromptRows = state.manualCodePrompt ? 1 : 0;
   const slashMenuRows = state.slashMenuVisible ? Math.max(1, state.slashCommandCount) : 0;
   const prompt = getPrompt(state.inputPrompt, state.manualCodePrompt);
   const inputWidth = state.inputWidth ?? (state.width ? getInputValueWidth(state.width, prompt) : 80);
   const inputRows = getMultilineInputRows(state.input ?? "", inputWidth, { mask: state.inputMask });
-  return 4 + inputRows + manualPromptRows + slashMenuRows;
+  return conversationGapRows + busyRows + statusRows + inputRows + 3 + manualPromptRows + slashMenuRows;
 }
 
 export interface InputBarProps extends InputBarLayoutState {
@@ -117,8 +120,10 @@ export function InputBar({
 
   return (
     <Box flexDirection="column" flexShrink={0} width={width}>
+      <Text backgroundColor={theme.surface.canvas}>{" ".repeat(Math.max(1, width))}</Text>
+      {status ? <BusyLine status={status} theme={theme} width={width} /> : null}
       <StatusLine
-        busyStatus={status}
+        busyStatus={null}
         conversationName={conversationName}
         labels={labels}
         model={model}

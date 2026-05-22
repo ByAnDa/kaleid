@@ -20,7 +20,6 @@ export interface StatusLineState {
 }
 
 export interface StatusLineLayout {
-  busyStatus: string | null;
   fallbackText: string | null;
   labels: string[];
   modelState: string;
@@ -52,7 +51,6 @@ export function formatStatusModel(
 
 export function formatStatusLineText(state: StatusLineState): string {
   return [
-    state.busyStatus,
     state.conversationName,
     state.project,
     ...state.labels.map((label) => `#${visibleLabel(label)}`),
@@ -71,13 +69,8 @@ function fixedTailWidth(project: string | null, labels: readonly string[], model
   return parts.reduce((total, width) => total + width, 0) + STATUS_SEPARATOR.length * parts.length;
 }
 
-function busyWidth(status: string | null): number {
-  return status ? 2 + textWidth(status) + STATUS_SEPARATOR.length : 0;
-}
-
 function withFiller(layout: StatusLineLayout): StatusLineLayout {
   const width =
-    busyWidth(layout.busyStatus) +
     textWidth(layout.name) +
     fixedTailWidth(layout.project, layout.labels, layout.modelState);
   return { ...layout, width };
@@ -86,25 +79,23 @@ function withFiller(layout: StatusLineLayout): StatusLineLayout {
 export function buildStatusLineLayout(state: StatusLineState, width: number): StatusLineLayout {
   const maxWidth = Math.max(1, width);
   const modelState = formatStatusModel(state.model, state.reasoningEffort, state.provider);
-  const busy = state.busyStatus ? truncateEnd(state.busyStatus, Math.min(24, Math.max(1, Math.floor(maxWidth / 3)))) : null;
   let project = state.project;
   let labels = state.labels.slice(0, MAX_STATUS_LABELS).map(visibleLabel);
   let availableNameWidth =
-    maxWidth - busyWidth(busy) - fixedTailWidth(project, labels, modelState);
+    maxWidth - fixedTailWidth(project, labels, modelState);
 
   while (labels.length > 0 && availableNameWidth < 4) {
     labels = labels.slice(0, -1);
-    availableNameWidth = maxWidth - busyWidth(busy) - fixedTailWidth(project, labels, modelState);
+    availableNameWidth = maxWidth - fixedTailWidth(project, labels, modelState);
   }
 
   if (project && availableNameWidth < 2) {
     project = null;
-    availableNameWidth = maxWidth - busyWidth(busy) - fixedTailWidth(project, labels, modelState);
+    availableNameWidth = maxWidth - fixedTailWidth(project, labels, modelState);
   }
 
   if (availableNameWidth <= 0) {
     return {
-      busyStatus: null,
       fallbackText: truncateEnd(formatStatusLineText(state), maxWidth),
       labels: [],
       modelState: "",
@@ -115,7 +106,6 @@ export function buildStatusLineLayout(state: StatusLineState, width: number): St
   }
 
   return withFiller({
-    busyStatus: busy,
     fallbackText: null,
     labels,
     modelState,
@@ -126,7 +116,6 @@ export function buildStatusLineLayout(state: StatusLineState, width: number): St
 }
 
 export function StatusLine({
-  busyStatus,
   conversationName,
   labels,
   model,
@@ -137,17 +126,18 @@ export function StatusLine({
   width
 }: StatusLineState & { theme: ResolvedTuiTheme; width: number }): React.ReactElement {
   const layout = buildStatusLineLayout(
-    { busyStatus, conversationName, labels, model, project, provider, reasoningEffort },
+    { busyStatus: null, conversationName, labels, model, project, provider, reasoningEffort },
     width
   );
   const fill = " ".repeat(Math.max(0, width - layout.width));
 
   if (layout.fallbackText) {
+    const fallbackFill = " ".repeat(Math.max(0, width - textWidth(layout.fallbackText)));
     return (
       <Box width={width}>
         <Text backgroundColor={theme.surface.canvas} color={theme.text.secondary}>
+          {fallbackFill}
           {layout.fallbackText}
-          {" ".repeat(Math.max(0, width - textWidth(layout.fallbackText)))}
         </Text>
       </Box>
     );
@@ -155,16 +145,7 @@ export function StatusLine({
 
   return (
     <Box flexDirection="row" width={width}>
-      {layout.busyStatus ? (
-        <>
-          <Text backgroundColor={theme.surface.canvas} color={theme.status.warn}>
-            <Spinner type="dots" /> {layout.busyStatus}
-          </Text>
-          <Text backgroundColor={theme.surface.canvas} color={theme.text.muted}>
-            {STATUS_SEPARATOR}
-          </Text>
-        </>
-      ) : null}
+      <Text backgroundColor={theme.surface.canvas}>{fill}</Text>
       <Text backgroundColor={theme.surface.canvas} color={theme.text.primary}>
         {layout.name}
       </Text>
@@ -189,6 +170,27 @@ export function StatusLine({
       </Text>
       <Text backgroundColor={theme.surface.canvas} color={theme.text.secondary}>
         {layout.modelState}
+      </Text>
+    </Box>
+  );
+}
+
+export function BusyLine({
+  status,
+  theme,
+  width
+}: {
+  status: string;
+  theme: ResolvedTuiTheme;
+  width: number;
+}): React.ReactElement {
+  const visibleStatus = truncateEnd(status, Math.max(1, width - 2));
+  const fill = " ".repeat(Math.max(0, width - 2 - textWidth(visibleStatus)));
+
+  return (
+    <Box flexDirection="row" width={width}>
+      <Text backgroundColor={theme.surface.canvas} color={theme.status.warn}>
+        <Spinner type="dots" /> {visibleStatus}
       </Text>
       <Text backgroundColor={theme.surface.canvas}>{fill}</Text>
     </Box>

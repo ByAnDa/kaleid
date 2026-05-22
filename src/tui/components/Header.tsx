@@ -6,7 +6,7 @@ import { ProjectBadge, TagBadge } from "./Badges.js";
 
 export const HEADER_HEIGHT = 7;
 const VERSION_LABEL = "v0.0.13";
-const LOGO_LINES = ["   ◆   ", "  ◆◇◆  ", " ◆◇◆◇◆ ", "  ◆◇◆  ", "   ◆   "] as const;
+export const LOGO_LINES = ["   ◆   ", "  ◆◇◆  ", " ◆◇◆◇◆ ", "  ◆◇◆  ", "   ◆   "] as const;
 
 export interface HeaderProps {
   labels: readonly string[];
@@ -46,9 +46,11 @@ export function buildWelcomeIntroText(
   provider?: ProviderId
 ): string {
   return [
-    `kaleid ${VERSION_LABEL} · ${formatHeaderState(model, reasoningEffort, provider)}`,
-    "a kaleidoscopic terminal agent · multi-model · project & label scoped",
-    "/help · /resume · /label · ^C interrupt · ^D exit"
+    `${LOGO_LINES[0]}  kaleid ${VERSION_LABEL} · ${formatHeaderState(model, reasoningEffort, provider)}`,
+    `${LOGO_LINES[1]}  a kaleidoscopic terminal agent · multi-model · project & label scoped`,
+    `${LOGO_LINES[2]}  /help · /resume · /label · ^C interrupt · ^D exit`,
+    `${LOGO_LINES[3]}  terminal coding harness`,
+    LOGO_LINES[4]
   ].join("\n");
 }
 

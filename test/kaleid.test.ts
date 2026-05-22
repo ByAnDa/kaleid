@@ -784,7 +784,10 @@ test("TUI header and option selector format model and reasoning state", () => {
   assert.equal(formatHeaderState("gpt-5.5", "high"), "gpt-5.5 · high");
   assert.equal(formatHeaderState("kimi-for-coding", null, "kimi"), "kimi-for-coding [kimi] · -");
   assert.equal(truncateHeaderState("gpt-5.5-pro · medium", 12), "gpt-5.5-p...");
-  assert.match(buildWelcomeIntroText("gpt-5.5", "high"), /^kaleid v0\.0\.13 · gpt-5\.5 · high/u);
+  const welcomeIntro = buildWelcomeIntroText("gpt-5.5", "high");
+  assert.match(welcomeIntro, /^   ◆     kaleid v0\.0\.13 · gpt-5\.5 · high/u);
+  assert.match(welcomeIntro, /◆◇◆/u);
+  assert.equal(welcomeIntro.split("\n").length, 5);
   assert.equal(getOptionSelectorHeight(5), 8);
   assert.equal(getResumeSelectorHeight(5), 8);
   assert.equal(getResumeSelectorHeight(5, true), 9);
@@ -997,7 +1000,7 @@ test("TUI selector Esc keeps chained model and standalone reasoning only changes
 test("TUI input footer reserves rows for status, slash menu, and OAuth paste mode", () => {
   assert.equal(
     getInputBarHeight({ manualCodePrompt: null, slashCommandCount: 4, slashMenuVisible: false, status: null }),
-    5
+    6
   );
   assert.equal(
     getInputBarHeight({
@@ -1008,11 +1011,11 @@ test("TUI input footer reserves rows for status, slash menu, and OAuth paste mod
       slashMenuVisible: false,
       status: null
     }),
-    6
+    7
   );
   assert.equal(
     getInputBarHeight({ manualCodePrompt: null, slashCommandCount: 4, slashMenuVisible: true, status: null }),
-    9
+    10
   );
   assert.equal(
     getInputBarHeight({
@@ -1021,7 +1024,7 @@ test("TUI input footer reserves rows for status, slash menu, and OAuth paste mod
       slashMenuVisible: true,
       status: "waiting"
     }),
-    7
+    9
   );
   assert.equal(formatStatusModel("gpt-5.5", "high"), "gpt-5.5 · high");
   const statusLayout = buildStatusLineLayout(
@@ -1041,6 +1044,20 @@ test("TUI input footer reserves rows for status, slash menu, and OAuth paste mod
   assert.deepEqual(statusLayout.labels, ["review"]);
   assert.equal(statusLayout.modelState, "gpt-5.5 · high");
   assert.ok(statusLayout.width <= 44);
+  const busyStatusLayout = buildStatusLineLayout(
+    {
+      busyStatus: "thinking...",
+      conversationName: "focused task",
+      labels: [],
+      model: "gpt-5.5",
+      project: null,
+      reasoningEffort: "medium"
+    },
+    40
+  );
+  assert.equal(busyStatusLayout.fallbackText, null);
+  assert.equal(busyStatusLayout.name, "focused task");
+  assert.equal(busyStatusLayout.modelState, "gpt-5.5 · medium");
   assert.equal(
     formatTokenStatus({
       usedTokens: 12345,
