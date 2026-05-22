@@ -132,6 +132,9 @@ Reviewer: ByAnDa
 
 ## 八、V1 后演进（spec-008~014，并入本 PRD）
 
+### spec-024 — TUI 第三轮修复（待审核）
+- 3 项：①**logo banner 双色还原**（spec-023 把 logo 作 system 纯文本→单色暗，改为复用 LogoLine 的 ◆烧橙/◇muted 彩色 banner 作对话首条特殊条目，仍上滚消失）；②**输入框右边距/对齐/背景填满**（顶部状态行与底部 footer 与右边框留统一小空隙且右对齐对齐；输入框 canvas 底色填满到右内沿、无纯黑残留）；③**修复 resume 的 project/label 筛选回归**（用户反馈"没了"；代码渲染+导航+应用均在，疑视觉/布局回归致筛选栏不可见/不可聚焦，真实终端复现修复，恢复 spec-018 行为）。详见 `kaleid spec-024 banner-input-resume-fixes.md`。
+
 ### spec-023 — TUI 二轮精修（待审核）
 - 4 项（原第 5 项"鼠标滚轮翻动"经 ByAnDa msg=f25ed83f 去掉）：①底部状态信息行**右对齐**（仍单行不换行、对话名 `…` 截断）；②thinking/忙碌指示**独占一行**，不与状态信息同行；③对话区与底部状态行之间留白（约 1 空行）；④启动欢迎区**恢复上一版带 ◆◇◆ logo 的 banner 设计**（仍作对话首条随上滚消失，不回固定 Header）。详见 `kaleid spec-023 tui-statusline-and-scroll.md`。
 
