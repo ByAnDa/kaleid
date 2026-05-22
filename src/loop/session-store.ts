@@ -12,6 +12,8 @@ export interface SessionMetadata {
   updatedAt: string;
   model?: string;
   reasoningEffort?: ReasoningEffort;
+  project: string | null;
+  name: string;
   title?: string;
 }
 
@@ -37,12 +39,17 @@ export interface SessionData {
 export interface SessionSummary {
   id: string;
   title: string;
+  project: string | null;
+  name: string;
+  label: string;
   createdAt: string;
   updatedAt: string;
   model?: string;
   reasoningEffort?: ReasoningEffort;
   messageCount: number;
 }
+
+export const DEFAULT_SESSION_NAME = "untitled";
 
 export function getSessionDir(): string {
   return process.env.KALEID_SESSIONS_DIR ?? join(homedir(), ".kaleid", "sessions");
@@ -71,6 +78,48 @@ function safeJsonParse(line: string): SessionStoreEntry | null {
   return null;
 }
 
+export function normalizeSessionProject(project: string | null | undefined): string | null {
+  const trimmed = project?.trim() ?? "";
+  return trimmed.length > 0 ? trimmed : null;
+}
+
+export function normalizeSessionName(name: string | null | undefined): string {
+  const trimmed = name?.trim() ?? "";
+  return trimmed.length > 0 ? trimmed : DEFAULT_SESSION_NAME;
+}
+
+export function sessionNameFromMessage(message: ChatMessage): string | undefined {
+  if (message.role !== "user") {
+    return undefined;
+  }
+
+  const firstLine = message.content.split(/\r?\n/u)[0] ?? "";
+  const name = firstLine.trim().replace(/\s+/gu, " ").slice(0, 80);
+  return name.length > 0 ? name : undefined;
+}
+
+function deriveSessionName(metadata: Partial<SessionMetadata>, messages: ChatMessage[]): string {
+  const metadataName = metadata.name ?? metadata.title;
+  if (metadataName && metadataName.trim().length > 0) {
+    return normalizeSessionName(metadataName);
+  }
+
+  for (const message of messages) {
+    const name = sessionNameFromMessage(message);
+    if (name) {
+      return name;
+    }
+  }
+
+  return DEFAULT_SESSION_NAME;
+}
+
+export function formatSessionDisplayName(project: string | null | undefined, name: string): string {
+  const normalizedProject = normalizeSessionProject(project);
+  const normalizedName = normalizeSessionName(name);
+  return normalizedProject ? `${normalizedProject} - ${normalizedName}` : normalizedName;
+}
+
 export async function appendSessionEntries(id: string, entries: SessionStoreEntry[]): Promise<void> {
   if (entries.length === 0) {
     return;
@@ -88,9 +137,12 @@ export async function loadSessionData(id: string): Promise<SessionData> {
   let metadata: SessionMetadata = {
     id,
     createdAt: now,
-    updatedAt: now
+    updatedAt: now,
+    project: null,
+    name: DEFAULT_SESSION_NAME
   };
   let messages: ChatMessage[] = [];
+  let sawStoredName = false;
 
   for (const line of text.split(/\r?\n/u)) {
     if (line.trim().length === 0) {
@@ -103,6 +155,9 @@ export async function loadSessionData(id: string): Promise<SessionData> {
     }
 
     if (entry.type === "meta") {
+      if (Object.prototype.hasOwnProperty.call(entry.metadata, "name")) {
+        sawStoredName = true;
+      }
       metadata = { ...metadata, ...entry.metadata, id };
       continue;
     }
@@ -118,6 +173,9 @@ export async function loadSessionData(id: string): Promise<SessionData> {
       metadata.updatedAt = entry.at;
     }
   }
+
+  metadata.project = normalizeSessionProject(metadata.project);
+  metadata.name = deriveSessionName(sawStoredName ? metadata : { ...metadata, name: undefined }, messages);
 
   return { id, metadata, messages };
 }
@@ -137,9 +195,13 @@ export async function listSessions(): Promise<SessionSummary[]> {
       const data = await loadSessionData(id);
       const fileStat = await stat(sessionPath(id));
       const updatedAt = data.metadata.updatedAt || fileStat.mtime.toISOString();
+      const label = formatSessionDisplayName(data.metadata.project, data.metadata.name);
       summaries.push({
         id,
-        title: data.metadata.title ?? "Untitled session",
+        title: label,
+        project: data.metadata.project,
+        name: data.metadata.name,
+        label,
         createdAt: data.metadata.createdAt,
         updatedAt,
         model: data.metadata.model,

@@ -4,7 +4,7 @@ import { saveApiKey, type ApiKeyProviderId } from "../auth/config-store.js";
 import type { runTurn as runTurnFn } from "../loop/agent-loop.js";
 import { buildSystemPrompt } from "../loop/system-prompt.js";
 import { createSession, type Session, type TokenState } from "../loop/session.js";
-import { listSessions, loadSessionData, type SessionSummary } from "../loop/session-store.js";
+import { formatSessionDisplayName, listSessions, loadSessionData, type SessionSummary } from "../loop/session-store.js";
 import {
   DEFAULT_REASONING_EFFORT,
   REASONING_LEVELS,
@@ -22,6 +22,7 @@ import type { LLMProvider } from "../provider/types.js";
 import type { Tool } from "../tools/types.js";
 import {
   getSlashCommandCompletions,
+  parseRenameCommandArgs,
   parseSlash,
   runSlashCommand,
   type SlashCommandDefinition
@@ -77,11 +78,11 @@ function messagesToHistory(messages: Session["messages"]): Msg[] {
     }));
 }
 
-function resumeToOption(session: SessionSummary): OptionSelectorItem {
+export function resumeToOption(session: SessionSummary): OptionSelectorItem {
   const model = session.model ? ` · ${session.model}` : "";
   return {
     id: session.id,
-    label: `${session.title}${model}`,
+    display: `${session.label}${model}`,
     current: false
   };
 }
@@ -254,6 +255,9 @@ export function App({
   const { exit } = useApp();
   const terminal = useTerminalDimensions();
   const [currentSession, setCurrentSession] = useState(session);
+  const [conversationLabel, setConversationLabel] = useState(() =>
+    formatSessionDisplayName(session.metadata.project, session.metadata.name)
+  );
   const [currentModel, setCurrentModel] = useState(session.metadata.model ?? model);
   const [availableModels, setAvailableModels] = useState<AvailableModel[]>([]);
   const [reasoningEffort, setReasoningEffort] = useState<ReasoningEffort>(
@@ -457,11 +461,16 @@ export function App({
         const restoredModel = data.metadata.model ?? model;
         const restoredEffort = data.metadata.reasoningEffort ?? DEFAULT_REASONING_EFFORT;
         setCurrentSession(restored);
+        setConversationLabel(formatSessionDisplayName(restored.metadata.project, restored.metadata.name));
         setCurrentModel(restoredModel);
         setReasoningEffort(restoredEffort);
         setHistory(messagesToHistory(data.messages));
         setTokenState(restored.refreshTokenEstimate(restoredModel, buildSystemPrompt(cwd)));
-        commit({ id: nextId(), role: "system", text: `已恢复会话: ${data.metadata.title ?? data.id}` });
+        commit({
+          id: nextId(),
+          role: "system",
+          text: `已恢复会话: ${formatSessionDisplayName(data.metadata.project, data.metadata.name)}`
+        });
       } catch (error) {
         commit({ id: nextId(), role: "error", text: error instanceof Error ? error.message : String(error) });
       } finally {
@@ -703,6 +712,31 @@ export function App({
           return;
         }
 
+        if (slash.command === "/rename") {
+          setSlashMenuOpen(false);
+          const rename = parseRenameCommandArgs(slash.args);
+          if (!rename) {
+            commit({ id: nextId(), role: "system", text: "用法: /rename <名称> 或 /rename <项目>/<名称>" });
+            return;
+          }
+
+          setBusy(true);
+          setStatus("renaming session...");
+          try {
+            currentSession.renameConversation(rename.name, rename.project);
+            await currentSession.persist();
+            const label = formatSessionDisplayName(currentSession.metadata.project, currentSession.metadata.name);
+            setConversationLabel(label);
+            commit({ id: nextId(), role: "system", text: `已重命名: ${label}` });
+          } catch (error) {
+            commit({ id: nextId(), role: "error", text: error instanceof Error ? error.message : String(error) });
+          } finally {
+            setBusy(false);
+            setStatus(null);
+          }
+          return;
+        }
+
         if (slash.command === "/compact") {
           setSlashMenuOpen(false);
           setBusy(true);
@@ -796,6 +830,7 @@ export function App({
           cwd,
           signal: abort.signal
         })) {
+          setConversationLabel(formatSessionDisplayName(currentSession.metadata.project, currentSession.metadata.name));
           if (event.type === "assistant_text") {
             streamBuffer += event.delta;
             setStreaming(streamBuffer);
@@ -912,6 +947,7 @@ export function App({
         slashMenuVisible={slashMenuVisible}
         status={status}
         tokenState={tokenState}
+        conversationLabel={conversationLabel}
         width={terminal.columns}
       />
     </Box>

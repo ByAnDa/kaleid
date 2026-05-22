@@ -1,6 +1,14 @@
 import { randomUUID } from "node:crypto";
 import { compactMessages, estimateMessagesTokenCount, type CompactionResult } from "./compaction.js";
-import { appendSessionEntries, type SessionMetadata, type SessionStoreEntry } from "./session-store.js";
+import {
+  DEFAULT_SESSION_NAME,
+  appendSessionEntries,
+  normalizeSessionName,
+  normalizeSessionProject,
+  sessionNameFromMessage,
+  type SessionMetadata,
+  type SessionStoreEntry
+} from "./session-store.js";
 import { getModelMemoryConfig, type ReasoningEffort } from "../provider/models.js";
 import type { ChatMessage, LLMProvider, TokenUsage } from "../provider/types.js";
 
@@ -30,6 +38,7 @@ export interface Session {
   messages: ChatMessage[];
   metadata: SessionMetadata;
   append(msg: ChatMessage): void;
+  renameConversation(name: string, project?: string | null): void;
   setRunState(model: string, reasoningEffort?: ReasoningEffort): void;
   refreshTokenEstimate(model: string, systemPrompt?: string): TokenState;
   updateTokenUsage(model: string, usage: TokenUsage, systemPrompt?: string): TokenState;
@@ -48,15 +57,6 @@ export interface CreateSessionOptions {
 
 function nowIso(): string {
   return new Date().toISOString();
-}
-
-function titleFromMessage(message: ChatMessage): string | undefined {
-  if (message.role !== "user") {
-    return undefined;
-  }
-
-  const title = (message.content.split(/\r?\n/u)[0] ?? "").trim().slice(0, 80);
-  return title.length > 0 ? title : undefined;
 }
 
 function calculateTokenState(
@@ -101,10 +101,12 @@ class MemorySession implements Session {
   private pendingEntries: SessionStoreEntry[] = [];
   private metaDirty: boolean;
   private tokenState: TokenState;
+  private canAutoname: boolean;
 
   constructor(options: CreateSessionOptions = {}) {
     const createdAt = options.metadata?.createdAt ?? nowIso();
     const id = options.id ?? options.metadata?.id ?? randomUUID();
+    const name = normalizeSessionName(options.metadata?.name ?? options.metadata?.title ?? DEFAULT_SESSION_NAME);
     this.id = id;
     this.messages = [...(options.messages ?? [])];
     this.metadata = {
@@ -113,9 +115,12 @@ class MemorySession implements Session {
       updatedAt: options.metadata?.updatedAt ?? createdAt,
       model: options.metadata?.model ?? options.model,
       reasoningEffort: options.metadata?.reasoningEffort,
+      project: normalizeSessionProject(options.metadata?.project),
+      name,
       title: options.metadata?.title
     };
     this.metaDirty = !options.persisted;
+    this.canAutoname = options.metadata?.name === undefined && options.metadata?.title === undefined;
     this.tokenState = calculateTokenState(this.messages, this.metadata.model ?? options.model ?? "gpt-5.5", "", "estimate");
   }
 
@@ -125,13 +130,40 @@ class MemorySession implements Session {
     this.pendingEntries.push({ type: "message", at, message: msg });
     this.metadata.updatedAt = at;
 
-    if (!this.metadata.title) {
-      const title = titleFromMessage(msg);
-      if (title) {
-        this.metadata.title = title;
+    if (this.canAutoname || !this.metadata.title) {
+      const name = sessionNameFromMessage(msg);
+      if (name) {
+        if (this.canAutoname) {
+          this.metadata.name = name;
+          this.canAutoname = false;
+        }
+        if (!this.metadata.title) {
+          this.metadata.title = name;
+        }
         this.metaDirty = true;
       }
     }
+  }
+
+  renameConversation(name: string, project?: string | null): void {
+    const trimmedName = name.trim();
+    if (!trimmedName) {
+      throw new Error("Conversation name cannot be empty");
+    }
+
+    const nextName = normalizeSessionName(trimmedName);
+    const nextProject = project === undefined ? this.metadata.project : normalizeSessionProject(project);
+    if (this.metadata.name === nextName && this.metadata.project === nextProject) {
+      this.canAutoname = false;
+      return;
+    }
+
+    this.metadata.name = nextName;
+    this.metadata.project = nextProject;
+    this.metadata.title = nextName;
+    this.metadata.updatedAt = nowIso();
+    this.metaDirty = true;
+    this.canAutoname = false;
   }
 
   setRunState(model: string, reasoningEffort?: ReasoningEffort): void {

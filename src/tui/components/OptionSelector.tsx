@@ -4,6 +4,7 @@ import { Box, Text } from "ink";
 export interface OptionSelectorItem {
   id: string;
   label?: string;
+  display?: string;
   current: boolean;
   provider?: string;
 }
@@ -22,9 +23,10 @@ export function getOptionSelectorHeight(optionCount: number): number {
 export function formatOptionSelectorLine(option: OptionSelectorItem, selected: boolean): string {
   const focusMark = selected ? "> " : "  ";
   const currentMark = option.current ? "* " : "  ";
-  const label = option.label ? ` - ${option.label}` : "";
+  const primary = option.display ?? option.id;
+  const label = option.display ? "" : option.label ? ` - ${option.label}` : "";
   const current = option.current ? " (current)" : "";
-  return `${focusMark}${currentMark}${option.id}${label}${current}`;
+  return `${focusMark}${currentMark}${primary}${label}${current}`;
 }
 
 export function OptionSelector({
