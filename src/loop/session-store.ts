@@ -51,6 +51,11 @@ export interface SessionSummary {
   messageCount: number;
 }
 
+export interface SessionSummaryFilter {
+  project?: string | null;
+  label?: string | null;
+}
+
 export const DEFAULT_SESSION_NAME = "untitled";
 export const DEFAULT_SESSION_LABEL_LIMIT = 3;
 
@@ -261,6 +266,20 @@ export async function listSessions(): Promise<SessionSummary[]> {
   }
 
   return summaries.sort((a, b) => Date.parse(b.updatedAt) - Date.parse(a.updatedAt));
+}
+
+export function filterSessions(
+  sessions: readonly SessionSummary[],
+  filter: SessionSummaryFilter
+): SessionSummary[] {
+  const project = normalizeSessionProject(filter.project);
+  const label = normalizeSessionLabel(filter.label);
+
+  return sessions.filter((session) => {
+    const matchesProject = !project || normalizeSessionProject(session.project) === project;
+    const matchesLabel = !label || normalizeSessionLabels(session.labels).includes(label);
+    return matchesProject && matchesLabel;
+  });
 }
 
 export interface SessionMetadataOptions {

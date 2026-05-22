@@ -1,17 +1,20 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Box, useApp, useInput } from "ink";
+import { Box, Text, useApp, useInput } from "ink";
 import { saveApiKey, type ApiKeyProviderId } from "../auth/config-store.js";
 import type { runTurn as runTurnFn } from "../loop/agent-loop.js";
 import { buildSystemPrompt } from "../loop/system-prompt.js";
 import { createSession, type Session, type TokenState } from "../loop/session.js";
 import {
   DEFAULT_SESSION_LABEL_LIMIT,
+  filterSessions,
   formatSessionDisplayName,
   listSessionMetadataOptions,
   listSessions,
   loadSessionData,
+  normalizeSessionLabel,
   normalizeSessionLabels,
   normalizeSessionProject,
+  type SessionMetadataOptions,
   type SessionMetadata,
   type SessionSummary
 } from "../loop/session-store.js";
@@ -105,11 +108,22 @@ export function resumeToOption(session: SessionSummary): OptionSelectorItem {
   };
 }
 
-export type SelectorKind = "model" | "reasoning" | "login" | "resume";
+export interface ResumeFilterState {
+  project: string | null;
+  label: string | null;
+}
+
+export type ResumeFilterFocus = "project" | "label" | "sessions";
+export type SelectorKind = "model" | "reasoning" | "login" | "resume" | "resumeProjectFilter" | "resumeLabelFilter";
 export type SelectorFlow = "standalone" | "modelEffortChain";
 export type ComboboxKind = "project" | "chatlabel";
 
 export const CLEAR_PROJECT_OPTION_ID = "__clear_project__";
+export const CLEAR_RESUME_FILTER_OPTION_ID = "__clear_resume_filter__";
+export const EMPTY_RESUME_OPTION_ID = "__empty_resume__";
+
+const DEFAULT_RESUME_FILTER: ResumeFilterState = { project: null, label: null };
+const EMPTY_SESSION_METADATA_OPTIONS: SessionMetadataOptions = { projects: [], labels: [] };
 
 export interface SelectorTransitionInput {
   activeSelector: SelectorKind;
@@ -217,6 +231,81 @@ export function buildChatLabelComboboxOptions(
   }));
 }
 
+export function formatResumeFilterValue(value: string | null | undefined): string {
+  return value ?? "全部";
+}
+
+export function buildResumeProjectFilterOptions(
+  projects: readonly string[],
+  currentProject: string | null | undefined
+): OptionSelectorItem[] {
+  const normalizedCurrentProject = normalizeSessionProject(currentProject);
+  const projectSet = new Set<string>();
+  for (const project of projects) {
+    const normalizedProject = normalizeSessionProject(project);
+    if (normalizedProject) {
+      projectSet.add(normalizedProject);
+    }
+  }
+  if (normalizedCurrentProject) {
+    projectSet.add(normalizedCurrentProject);
+  }
+
+  return [
+    {
+      id: CLEAR_RESUME_FILTER_OPTION_ID,
+      display: "全部",
+      current: normalizedCurrentProject === null
+    },
+    ...[...projectSet].sort((a, b) => a.localeCompare(b)).map((project) => ({
+      id: project,
+      current: project === normalizedCurrentProject
+    }))
+  ];
+}
+
+export function buildResumeLabelFilterOptions(
+  labels: readonly string[],
+  currentLabel: string | null | undefined
+): OptionSelectorItem[] {
+  const normalizedCurrentLabel = normalizeSessionLabel(currentLabel);
+  const labelSet = new Set(normalizeSessionLabels(labels));
+  if (normalizedCurrentLabel) {
+    labelSet.add(normalizedCurrentLabel);
+  }
+
+  return [
+    {
+      id: CLEAR_RESUME_FILTER_OPTION_ID,
+      display: "全部",
+      current: normalizedCurrentLabel === null
+    },
+    ...[...labelSet].sort((a, b) => a.localeCompare(b)).map((label) => ({
+      id: label,
+      current: label === normalizedCurrentLabel
+    }))
+  ];
+}
+
+export function buildResumeSelectorOptions(
+  sessions: readonly SessionSummary[],
+  filter: ResumeFilterState
+): OptionSelectorItem[] {
+  const options = filterSessions(sessions, filter).map(resumeToOption);
+  if (options.length > 0) {
+    return options;
+  }
+
+  return [
+    {
+      id: EMPTY_RESUME_OPTION_ID,
+      display: "无匹配会话",
+      current: false,
+      disabled: true
+    }
+  ];
+}
+
 export function resolveComboboxSubmission(
   input: string,
   options: readonly OptionComboboxItem[],
@@ -298,7 +387,11 @@ export function cancelSelectorTransition(input: SelectorCancelInput): SelectorTr
           ? "已取消登录"
           : input.activeSelector === "resume"
             ? "已取消恢复会话"
-            : "已取消推理强度选择"
+            : input.activeSelector === "resumeProjectFilter"
+              ? "已取消项目筛选"
+              : input.activeSelector === "resumeLabelFilter"
+                ? "已取消标签筛选"
+                : "已取消推理强度选择"
   };
 }
 
@@ -319,6 +412,31 @@ function useTerminalDimensions(): TerminalDimensions {
   }, []);
 
   return dimensions;
+}
+
+interface ResumeFilterBarProps {
+  filter: ResumeFilterState;
+  focus: ResumeFilterFocus;
+  width: number;
+}
+
+function ResumeFilterBar({ filter, focus, width }: ResumeFilterBarProps): React.ReactElement {
+  const renderFilter = (kind: Exclude<ResumeFilterFocus, "sessions">, text: string) => {
+    const selected = focus === kind;
+    return (
+      <Text backgroundColor={selected ? "green" : undefined} color={selected ? "black" : "cyan"}>
+        {text}
+      </Text>
+    );
+  };
+
+  return (
+    <Box flexShrink={0} paddingX={1} width={width}>
+      {renderFilter("project", `project: ${formatResumeFilterValue(filter.project)}`)}
+      <Text>  </Text>
+      {renderFilter("label", `label: ${formatResumeFilterValue(filter.label)}`)}
+    </Box>
+  );
 }
 
 export function App({
@@ -352,7 +470,12 @@ export function App({
   const [activeSelector, setActiveSelector] = useState<SelectorKind | null>(null);
   const [selectorFlow, setSelectorFlow] = useState<SelectorFlow>("standalone");
   const [selectorIndex, setSelectorIndex] = useState(0);
-  const [resumeOptions, setResumeOptions] = useState<OptionSelectorItem[]>([]);
+  const [resumeSessions, setResumeSessions] = useState<SessionSummary[]>([]);
+  const [resumeMetadataOptions, setResumeMetadataOptions] = useState<SessionMetadataOptions>(
+    EMPTY_SESSION_METADATA_OPTIONS
+  );
+  const [resumeFilter, setResumeFilter] = useState<ResumeFilterState>(DEFAULT_RESUME_FILTER);
+  const [resumeFocus, setResumeFocus] = useState<ResumeFilterFocus>("sessions");
   const [activeCombobox, setActiveCombobox] = useState<ComboboxKind | null>(null);
   const [comboboxOptions, setComboboxOptions] = useState<OptionComboboxItem[]>([]);
   const [comboboxIndex, setComboboxIndex] = useState(0);
@@ -382,6 +505,18 @@ export function App({
       })),
     [reasoningEffort]
   );
+  const resumeOptions = useMemo<OptionSelectorItem[]>(
+    () => buildResumeSelectorOptions(resumeSessions, resumeFilter),
+    [resumeFilter, resumeSessions]
+  );
+  const resumeProjectFilterOptions = useMemo<OptionSelectorItem[]>(
+    () => buildResumeProjectFilterOptions(resumeMetadataOptions.projects, resumeFilter.project),
+    [resumeFilter.project, resumeMetadataOptions.projects]
+  );
+  const resumeLabelFilterOptions = useMemo<OptionSelectorItem[]>(
+    () => buildResumeLabelFilterOptions(resumeMetadataOptions.labels, resumeFilter.label),
+    [resumeFilter.label, resumeMetadataOptions.labels]
+  );
   const selectorOptions =
     activeSelector === "model"
       ? modelOptions
@@ -391,7 +526,11 @@ export function App({
           ? LOGIN_OPTIONS
           : activeSelector === "resume"
             ? resumeOptions
-            : [];
+            : activeSelector === "resumeProjectFilter"
+              ? resumeProjectFilterOptions
+              : activeSelector === "resumeLabelFilter"
+                ? resumeLabelFilterOptions
+                : [];
   const selectedSelectorIndex =
     selectorOptions.length === 0 ? -1 : Math.min(selectorIndex, selectorOptions.length - 1);
   const selectorVisible = activeSelector !== null;
@@ -400,6 +539,7 @@ export function App({
   const selectedComboboxIndex =
     comboboxOptions.length === 0 ? -1 : Math.min(comboboxIndex, comboboxOptions.length - 1);
   const comboboxHeight = comboboxVisible ? getOptionComboboxHeight(comboboxOptions.length, comboboxInput) : 0;
+  const resumeFilterHeight = activeSelector === "resume" ? 1 : 0;
   const inputBarHeight = getInputBarHeight({
     manualCodePrompt,
     slashCommandCount: slashCandidates.length,
@@ -408,7 +548,7 @@ export function App({
   });
   const conversationHeight = Math.max(
     1,
-    terminal.rows - HEADER_HEIGHT - selectorHeight - comboboxHeight - inputBarHeight
+    terminal.rows - HEADER_HEIGHT - resumeFilterHeight - selectorHeight - comboboxHeight - inputBarHeight
   );
 
   const commit = useCallback((msg: Msg) => {
@@ -452,7 +592,11 @@ export function App({
             ? reasoningOptions
             : kind === "resume"
               ? resumeOptions
-              : LOGIN_OPTIONS;
+              : kind === "resumeProjectFilter"
+                ? resumeProjectFilterOptions
+                : kind === "resumeLabelFilter"
+                  ? resumeLabelFilterOptions
+                  : LOGIN_OPTIONS;
       setInput("");
       setSlashMenuOpen(false);
       setSlashMenuIndex(0);
@@ -460,7 +604,14 @@ export function App({
       setSelectorFlow(flow);
       setSelectorIndex(getCurrentIndex(options));
     },
-    [availableModels, currentModel, reasoningOptions, resumeOptions]
+    [
+      availableModels,
+      currentModel,
+      reasoningOptions,
+      resumeLabelFilterOptions,
+      resumeOptions,
+      resumeProjectFilterOptions
+    ]
   );
 
   const closeSelector = useCallback(() => {
@@ -726,14 +877,16 @@ export function App({
     setBusy(true);
     setStatus("loading sessions...");
     try {
-      const sessions = await listSessions();
+      const [sessions, metadataOptions] = await Promise.all([listSessions(), listSessionMetadataOptions()]);
       if (sessions.length === 0) {
         commit({ id: nextId(), role: "system", text: "没有可恢复的会话。" });
         return;
       }
 
-      const options = sessions.map(resumeToOption);
-      setResumeOptions(options);
+      setResumeSessions(sessions);
+      setResumeMetadataOptions(metadataOptions);
+      setResumeFilter({ ...DEFAULT_RESUME_FILTER });
+      setResumeFocus("sessions");
       setInput("");
       setSlashMenuOpen(false);
       setSlashMenuIndex(0);
@@ -767,7 +920,44 @@ export function App({
     }
 
     if (activeSelector === "resume") {
+      if (resumeFocus === "project") {
+        setActiveSelector("resumeProjectFilter");
+        setSelectorIndex(getCurrentIndex(resumeProjectFilterOptions));
+        return;
+      }
+
+      if (resumeFocus === "label") {
+        setActiveSelector("resumeLabelFilter");
+        setSelectorIndex(getCurrentIndex(resumeLabelFilterOptions));
+        return;
+      }
+
+      if (selected.disabled || selected.id === EMPTY_RESUME_OPTION_ID) {
+        return;
+      }
       void restoreSession(selected.id);
+      return;
+    }
+
+    if (activeSelector === "resumeProjectFilter") {
+      setResumeFilter((current) => ({
+        ...current,
+        project: selected.id === CLEAR_RESUME_FILTER_OPTION_ID ? null : selected.id
+      }));
+      setActiveSelector("resume");
+      setResumeFocus("sessions");
+      setSelectorIndex(0);
+      return;
+    }
+
+    if (activeSelector === "resumeLabelFilter") {
+      setResumeFilter((current) => ({
+        ...current,
+        label: selected.id === CLEAR_RESUME_FILTER_OPTION_ID ? null : selected.id
+      }));
+      setActiveSelector("resume");
+      setResumeFocus("sessions");
+      setSelectorIndex(0);
       return;
     }
 
@@ -805,6 +995,9 @@ export function App({
     modelOptions,
     reasoningEffort,
     reasoningOptions,
+    resumeFocus,
+    resumeLabelFilterOptions,
+    resumeProjectFilterOptions,
     runLoginFlow,
     restoreSession,
     selectedSelectorIndex,
@@ -852,6 +1045,88 @@ export function App({
     }
 
     if (activeSelector) {
+      if (activeSelector === "resumeProjectFilter" || activeSelector === "resumeLabelFilter") {
+        if (key.escape) {
+          setActiveSelector("resume");
+          setResumeFocus(activeSelector === "resumeProjectFilter" ? "project" : "label");
+          setSelectorIndex(0);
+          return;
+        }
+
+        if (key.upArrow) {
+          setSelectorIndex((current) => moveSelection(current, -1, selectorOptions.length));
+          return;
+        }
+
+        if (key.downArrow) {
+          setSelectorIndex((current) => moveSelection(current, 1, selectorOptions.length));
+          return;
+        }
+
+        if (key.return) {
+          applySelector();
+        }
+
+        return;
+      }
+
+      if (activeSelector === "resume") {
+        if (key.escape) {
+          const transition = cancelSelectorTransition({
+            activeSelector,
+            selectorFlow,
+            currentModel,
+            reasoningEffort
+          });
+          if (transition.message) {
+            commit({ id: nextId(), role: "system", text: transition.message });
+          }
+          closeSelector();
+          return;
+        }
+
+        if (key.tab) {
+          setResumeFocus((current) => (current === "project" ? "label" : current === "label" ? "sessions" : "project"));
+          return;
+        }
+
+        if (key.leftArrow) {
+          setResumeFocus((current) => (current === "label" ? "project" : "label"));
+          return;
+        }
+
+        if (key.rightArrow) {
+          setResumeFocus((current) => (current === "project" ? "label" : "sessions"));
+          return;
+        }
+
+        if (key.upArrow) {
+          if (resumeFocus === "sessions" && selectorIndex === 0) {
+            setResumeFocus("label");
+          } else if (resumeFocus === "sessions") {
+            setSelectorIndex((current) => moveSelection(current, -1, selectorOptions.length));
+          } else {
+            setResumeFocus(resumeFocus === "label" ? "project" : "sessions");
+          }
+          return;
+        }
+
+        if (key.downArrow) {
+          if (resumeFocus === "sessions") {
+            setSelectorIndex((current) => moveSelection(current, 1, selectorOptions.length));
+          } else {
+            setResumeFocus("sessions");
+          }
+          return;
+        }
+
+        if (key.return) {
+          applySelector();
+        }
+
+        return;
+      }
+
       if (key.escape) {
         const transition = cancelSelectorTransition({
           activeSelector,
@@ -1215,10 +1490,13 @@ export function App({
         width={terminal.columns}
       />
       <Conversation height={conversationHeight} messages={history} streaming={streaming} width={terminal.columns} />
+      {activeSelector === "resume" ? (
+        <ResumeFilterBar filter={resumeFilter} focus={resumeFocus} width={terminal.columns} />
+      ) : null}
       {selectorVisible ? (
         <OptionSelector
           options={selectorOptions}
-          selectedIndex={selectedSelectorIndex}
+          selectedIndex={activeSelector === "resume" && resumeFocus !== "sessions" ? -1 : selectedSelectorIndex}
           title={
             activeSelector === "model"
               ? "Select model"
@@ -1226,7 +1504,11 @@ export function App({
                 ? "Select provider"
                 : activeSelector === "resume"
                   ? "Resume session"
-                  : "Select reasoning effort"
+                  : activeSelector === "resumeProjectFilter"
+                    ? "Filter project"
+                    : activeSelector === "resumeLabelFilter"
+                      ? "Filter label"
+                      : "Select reasoning effort"
           }
           width={terminal.columns}
         />

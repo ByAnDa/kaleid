@@ -39,11 +39,13 @@ import { runTurn } from "../src/loop/agent-loop.js";
 import { createSession } from "../src/loop/session.js";
 import { COMPACTION_SUMMARY_PREFIX } from "../src/loop/compaction.js";
 import {
+  filterSessions,
   formatSessionDisplayName,
   listSessionMetadataOptions,
   listSessions,
   loadSessionData,
-  normalizeSessionLabels
+  normalizeSessionLabels,
+  type SessionSummary
 } from "../src/loop/session-store.js";
 import { bashTool } from "../src/tools/bash.js";
 import { executeBash } from "../src/tools/bash-executor.js";
@@ -61,9 +63,15 @@ import {
 import {
   buildChatLabelComboboxOptions,
   buildProjectComboboxOptions,
+  buildResumeLabelFilterOptions,
+  buildResumeProjectFilterOptions,
+  buildResumeSelectorOptions,
   applySelectorTransition,
   cancelSelectorTransition,
   CLEAR_PROJECT_OPTION_ID,
+  CLEAR_RESUME_FILTER_OPTION_ID,
+  EMPTY_RESUME_OPTION_ID,
+  formatResumeFilterValue,
   resumeToOption,
   resolveComboboxSubmission,
   resolveSlashEnterSubmission
@@ -569,6 +577,67 @@ test("TUI header and option selector format model and reasoning state", () => {
     resolveComboboxSubmission("new project", [{ id: "kaleid", current: false }], 0),
     "new project"
   );
+});
+
+test("resume session filters normalize project and label selections", () => {
+  const session = (id: string, project: string | null, labels: string[]): SessionSummary => ({
+    id,
+    title: id,
+    project,
+    name: id,
+    labels,
+    label: formatSessionDisplayName(project, id, labels),
+    createdAt: "2026-05-22T00:00:00.000Z",
+    updatedAt: "2026-05-22T00:00:00.000Z",
+    messageCount: 1
+  });
+  const sessions = [
+    session("kaleid_bug", "kaleid", ["bug", "urgent"]),
+    session("kaleid_docs", "kaleid", ["docs"]),
+    session("pi_bug", "pi", ["bug"]),
+    session("scratch", null, [])
+  ];
+
+  assert.equal(formatResumeFilterValue(null), "全部");
+  assert.equal(formatResumeFilterValue("kaleid"), "kaleid");
+  assert.deepEqual(buildResumeProjectFilterOptions(["pi", "kaleid", "pi"], "kaleid"), [
+    { id: CLEAR_RESUME_FILTER_OPTION_ID, display: "全部", current: false },
+    { id: "kaleid", current: true },
+    { id: "pi", current: false }
+  ]);
+  assert.deepEqual(buildResumeLabelFilterOptions(["#urgent", "bug", "bug"], "urgent"), [
+    { id: CLEAR_RESUME_FILTER_OPTION_ID, display: "全部", current: false },
+    { id: "bug", current: false },
+    { id: "urgent", current: true }
+  ]);
+
+  assert.deepEqual(filterSessions(sessions, { project: "kaleid" }).map((item) => item.id), [
+    "kaleid_bug",
+    "kaleid_docs"
+  ]);
+  assert.deepEqual(filterSessions(sessions, { label: "#bug" }).map((item) => item.id), [
+    "kaleid_bug",
+    "pi_bug"
+  ]);
+  assert.deepEqual(filterSessions(sessions, { project: "kaleid", label: "bug" }).map((item) => item.id), [
+    "kaleid_bug"
+  ]);
+  assert.deepEqual(filterSessions(sessions, { project: null, label: null }).map((item) => item.id), [
+    "kaleid_bug",
+    "kaleid_docs",
+    "pi_bug",
+    "scratch"
+  ]);
+  assert.deepEqual(filterSessions(sessions, { project: "pi", label: "docs" }), []);
+  assert.deepEqual(buildResumeSelectorOptions(sessions, { project: "pi", label: "docs" }), [
+    {
+      id: EMPTY_RESUME_OPTION_ID,
+      display: "无匹配会话",
+      current: false,
+      disabled: true
+    }
+  ]);
+  assert.equal(buildResumeSelectorOptions(sessions, { project: "pi", label: "bug" })[0]?.id, "pi_bug");
 });
 
 test("TUI selector transitions chain model selection into reasoning effort", () => {
@@ -1401,8 +1470,12 @@ test("session persistence writes jsonl and resume rebuilds compacted messages", 
     assert.deepEqual(lastMeta?.metadata?.labels, ["bug", "urgent"]);
     const renamedSummaries = await listSessions();
     assert.equal(renamedSummaries[0]?.label, "kaleid - 修复登录 #bug #urgent");
+    const second = createSession({ id: "session_second", model: "gpt-5.5" });
+    second.renameConversation("参考实现", "pi");
+    assert.equal(second.addLabel("bug"), true);
+    await second.persist();
     const metadataOptions = await listSessionMetadataOptions();
-    assert.deepEqual(metadataOptions, { projects: ["kaleid"], labels: ["bug", "urgent"] });
+    assert.deepEqual(metadataOptions, { projects: ["kaleid", "pi"], labels: ["bug", "urgent"] });
 
     const labeled = createSession({ id: "session_test", messages: renamedData.messages, metadata: renamedData.metadata, persisted: true });
     assert.equal(labeled.removeLabel("bug"), true);

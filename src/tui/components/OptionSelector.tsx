@@ -7,6 +7,7 @@ export interface OptionSelectorItem {
   display?: string;
   current: boolean;
   provider?: string;
+  disabled?: boolean;
 }
 
 export interface OptionSelectorProps {
@@ -45,11 +46,12 @@ export function OptionSelector({
       ) : (
         options.map((option, index) => {
           const selected = index === selectedIndex;
+          const color = option.disabled ? "yellow" : selected ? "black" : option.current ? "white" : "gray";
           return (
             <Text
               key={option.id}
-              backgroundColor={selected ? "green" : undefined}
-              color={selected ? "black" : option.current ? "white" : "gray"}
+              backgroundColor={selected && !option.disabled ? "green" : undefined}
+              color={color}
             >
               {formatOptionSelectorLine(option, selected)}
             </Text>
