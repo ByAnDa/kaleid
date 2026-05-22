@@ -4,7 +4,17 @@ import { saveApiKey, type ApiKeyProviderId } from "../auth/config-store.js";
 import type { runTurn as runTurnFn } from "../loop/agent-loop.js";
 import { buildSystemPrompt } from "../loop/system-prompt.js";
 import { createSession, type Session, type TokenState } from "../loop/session.js";
-import { formatSessionDisplayName, listSessions, loadSessionData, type SessionSummary } from "../loop/session-store.js";
+import {
+  DEFAULT_SESSION_LABEL_LIMIT,
+  formatSessionDisplayName,
+  listSessionMetadataOptions,
+  listSessions,
+  loadSessionData,
+  normalizeSessionLabels,
+  normalizeSessionProject,
+  type SessionMetadata,
+  type SessionSummary
+} from "../loop/session-store.js";
 import {
   DEFAULT_REASONING_EFFORT,
   REASONING_LEVELS,
@@ -22,6 +32,8 @@ import type { LLMProvider } from "../provider/types.js";
 import type { Tool } from "../tools/types.js";
 import {
   getSlashCommandCompletions,
+  parseChatLabelCommandArgs,
+  parseProjectCommandArgs,
   parseRenameCommandArgs,
   parseSlash,
   runSlashCommand,
@@ -35,6 +47,12 @@ import {
   getOptionSelectorHeight,
   type OptionSelectorItem
 } from "./components/OptionSelector.js";
+import {
+  OptionCombobox,
+  getOptionComboboxHeight,
+  isOptionComboboxTyping,
+  type OptionComboboxItem
+} from "./components/OptionCombobox.js";
 import { getTerminalDimensions, type TerminalDimensions } from "./terminal.js";
 import type { Msg } from "./types.js";
 
@@ -89,6 +107,9 @@ export function resumeToOption(session: SessionSummary): OptionSelectorItem {
 
 export type SelectorKind = "model" | "reasoning" | "login" | "resume";
 export type SelectorFlow = "standalone" | "modelEffortChain";
+export type ComboboxKind = "project" | "chatlabel";
+
+export const CLEAR_PROJECT_OPTION_ID = "__clear_project__";
 
 export interface SelectorTransitionInput {
   activeSelector: SelectorKind;
@@ -147,6 +168,65 @@ function modelToOption(currentModel: string, model: AvailableModel): OptionSelec
 function buildModelOptions(currentModel: string, models: AvailableModel[]): OptionSelectorItem[] {
   const options = models.length > 0 ? models : getModelOptions(currentModel, models);
   return options.map((model) => modelToOption(currentModel, model));
+}
+
+function formatInputConversationLabel(metadata: Pick<SessionMetadata, "project" | "name" | "labels">): string {
+  return formatSessionDisplayName(metadata.project, metadata.name, metadata.labels, {
+    maxLabels: DEFAULT_SESSION_LABEL_LIMIT
+  });
+}
+
+export function buildProjectComboboxOptions(
+  projects: readonly string[],
+  currentProject: string | null | undefined
+): OptionComboboxItem[] {
+  const normalizedCurrentProject = normalizeSessionProject(currentProject);
+  const projectSet = new Set<string>();
+  for (const project of projects) {
+    const normalizedProject = normalizeSessionProject(project);
+    if (normalizedProject) {
+      projectSet.add(normalizedProject);
+    }
+  }
+  if (normalizedCurrentProject) {
+    projectSet.add(normalizedCurrentProject);
+  }
+
+  return [
+    {
+      id: CLEAR_PROJECT_OPTION_ID,
+      display: "(无项目)",
+      current: normalizedCurrentProject === null
+    },
+    ...[...projectSet].sort((a, b) => a.localeCompare(b)).map((project) => ({
+      id: project,
+      current: project === normalizedCurrentProject
+    }))
+  ];
+}
+
+export function buildChatLabelComboboxOptions(
+  labels: readonly string[],
+  currentLabels: readonly string[]
+): OptionComboboxItem[] {
+  const currentLabelSet = new Set(normalizeSessionLabels(currentLabels));
+  const labelSet = new Set([...normalizeSessionLabels(labels), ...currentLabelSet]);
+  return [...labelSet].sort((a, b) => a.localeCompare(b)).map((label) => ({
+    id: label,
+    current: currentLabelSet.has(label)
+  }));
+}
+
+export function resolveComboboxSubmission(
+  input: string,
+  options: readonly OptionComboboxItem[],
+  selectedIndex: number
+): string | null {
+  if (input.trim().length > 0) {
+    return input;
+  }
+
+  return options[selectedIndex]?.id ?? null;
 }
 
 const LOGIN_OPTIONS: OptionSelectorItem[] = [
@@ -255,9 +335,7 @@ export function App({
   const { exit } = useApp();
   const terminal = useTerminalDimensions();
   const [currentSession, setCurrentSession] = useState(session);
-  const [conversationLabel, setConversationLabel] = useState(() =>
-    formatSessionDisplayName(session.metadata.project, session.metadata.name)
-  );
+  const [conversationLabel, setConversationLabel] = useState(() => formatInputConversationLabel(session.metadata));
   const [currentModel, setCurrentModel] = useState(session.metadata.model ?? model);
   const [availableModels, setAvailableModels] = useState<AvailableModel[]>([]);
   const [reasoningEffort, setReasoningEffort] = useState<ReasoningEffort>(
@@ -275,13 +353,18 @@ export function App({
   const [selectorFlow, setSelectorFlow] = useState<SelectorFlow>("standalone");
   const [selectorIndex, setSelectorIndex] = useState(0);
   const [resumeOptions, setResumeOptions] = useState<OptionSelectorItem[]>([]);
+  const [activeCombobox, setActiveCombobox] = useState<ComboboxKind | null>(null);
+  const [comboboxOptions, setComboboxOptions] = useState<OptionComboboxItem[]>([]);
+  const [comboboxIndex, setComboboxIndex] = useState(0);
+  const [comboboxInput, setComboboxInput] = useState("");
   const [busy, setBusy] = useState(false);
   const [manualCodePrompt, setManualCodePrompt] = useState<string | null>(null);
   const abortRef = useRef<AbortController | null>(null);
   const manualCodeRef = useRef<{ resolve: (value: string) => void; reject: (error: Error) => void } | null>(null);
   const slashCompletions = useMemo(() => getSlashCommandCompletions(input), [input]);
   const slashCandidates = slashCompletions ?? [];
-  const slashMenuVisible = !busy && !manualCodePrompt && !activeSelector && slashMenuOpen && slashCompletions !== null;
+  const slashMenuVisible =
+    !busy && !manualCodePrompt && !activeSelector && !activeCombobox && slashMenuOpen && slashCompletions !== null;
   const selectedSlashIndex = slashCandidates.length === 0 ? -1 : Math.min(slashMenuIndex, slashCandidates.length - 1);
   const currentProvider = useMemo(
     () => getProviderForModel(currentModel, availableModels),
@@ -313,20 +396,27 @@ export function App({
     selectorOptions.length === 0 ? -1 : Math.min(selectorIndex, selectorOptions.length - 1);
   const selectorVisible = activeSelector !== null;
   const selectorHeight = selectorVisible ? getOptionSelectorHeight(selectorOptions.length) : 0;
+  const comboboxVisible = activeCombobox !== null;
+  const selectedComboboxIndex =
+    comboboxOptions.length === 0 ? -1 : Math.min(comboboxIndex, comboboxOptions.length - 1);
+  const comboboxHeight = comboboxVisible ? getOptionComboboxHeight(comboboxOptions.length, comboboxInput) : 0;
   const inputBarHeight = getInputBarHeight({
     manualCodePrompt,
     slashCommandCount: slashCandidates.length,
     slashMenuVisible,
     status
   });
-  const conversationHeight = Math.max(1, terminal.rows - HEADER_HEIGHT - selectorHeight - inputBarHeight);
+  const conversationHeight = Math.max(
+    1,
+    terminal.rows - HEADER_HEIGHT - selectorHeight - comboboxHeight - inputBarHeight
+  );
 
   const commit = useCallback((msg: Msg) => {
     setHistory((current) => [...current, msg]);
   }, []);
 
   const updateInput = useCallback((value: string) => {
-    if (activeSelector) {
+    if (activeSelector || activeCombobox) {
       return;
     }
 
@@ -342,7 +432,7 @@ export function App({
     } else {
       setSlashMenuOpen(false);
     }
-  }, [activeSelector, manualCodePrompt]);
+  }, [activeCombobox, activeSelector, manualCodePrompt]);
 
   const completeSlashCommand = useCallback(() => {
     const selected = slashCandidates[selectedSlashIndex];
@@ -378,6 +468,157 @@ export function App({
     setSelectorFlow("standalone");
     setSelectorIndex(0);
   }, []);
+
+  const closeCombobox = useCallback(() => {
+    setActiveCombobox(null);
+    setComboboxOptions([]);
+    setComboboxIndex(0);
+    setComboboxInput("");
+  }, []);
+
+  const openProjectCombobox = useCallback(async () => {
+    setBusy(true);
+    setStatus("loading projects...");
+    setSlashMenuOpen(false);
+    try {
+      const options = await listSessionMetadataOptions();
+      const projectOptions = buildProjectComboboxOptions(options.projects, currentSession.metadata.project);
+      setInput("");
+      setActiveCombobox("project");
+      setComboboxOptions(projectOptions);
+      setComboboxInput("");
+      setComboboxIndex(getCurrentIndex(projectOptions));
+    } catch (error) {
+      commit({ id: nextId(), role: "error", text: error instanceof Error ? error.message : String(error) });
+    } finally {
+      setBusy(false);
+      setStatus(null);
+    }
+  }, [commit, currentSession]);
+
+  const openChatLabelCombobox = useCallback(async () => {
+    setBusy(true);
+    setStatus("loading labels...");
+    setSlashMenuOpen(false);
+    try {
+      const options = await listSessionMetadataOptions();
+      const labelOptions = buildChatLabelComboboxOptions(options.labels, currentSession.metadata.labels);
+      setInput("");
+      setActiveCombobox("chatlabel");
+      setComboboxOptions(labelOptions);
+      setComboboxInput("");
+      setComboboxIndex(getCurrentIndex(labelOptions));
+    } catch (error) {
+      commit({ id: nextId(), role: "error", text: error instanceof Error ? error.message : String(error) });
+    } finally {
+      setBusy(false);
+      setStatus(null);
+    }
+  }, [commit, currentSession]);
+
+  const applyProjectValue = useCallback(
+    async (project: string | null) => {
+      closeCombobox();
+      setBusy(true);
+      setStatus("setting project...");
+      try {
+        currentSession.setProject(project);
+        await currentSession.persist();
+        setConversationLabel(formatInputConversationLabel(currentSession.metadata));
+        const projectLabel = currentSession.metadata.project ?? "(无项目)";
+        commit({ id: nextId(), role: "system", text: `已设置项目: ${projectLabel}` });
+      } catch (error) {
+        commit({ id: nextId(), role: "error", text: error instanceof Error ? error.message : String(error) });
+      } finally {
+        setBusy(false);
+        setStatus(null);
+      }
+    },
+    [closeCombobox, commit, currentSession]
+  );
+
+  const addChatLabelValue = useCallback(
+    async (label: string) => {
+      closeCombobox();
+      setBusy(true);
+      setStatus("adding label...");
+      try {
+        const added = currentSession.addLabel(label);
+        await currentSession.persist();
+        setConversationLabel(formatInputConversationLabel(currentSession.metadata));
+        const normalizedLabel = normalizeSessionLabels([label])[0] ?? label.trim();
+        commit({
+          id: nextId(),
+          role: "system",
+          text: added ? `已添加标签: ${normalizedLabel}` : `标签已存在: ${normalizedLabel}`
+        });
+      } catch (error) {
+        commit({ id: nextId(), role: "error", text: error instanceof Error ? error.message : String(error) });
+      } finally {
+        setBusy(false);
+        setStatus(null);
+      }
+    },
+    [closeCombobox, commit, currentSession]
+  );
+
+  const removeChatLabelValue = useCallback(
+    async (label: string) => {
+      setBusy(true);
+      setStatus("removing label...");
+      try {
+        const removed = currentSession.removeLabel(label);
+        await currentSession.persist();
+        setConversationLabel(formatInputConversationLabel(currentSession.metadata));
+        const normalizedLabel = normalizeSessionLabels([label])[0] ?? label.trim();
+        commit({
+          id: nextId(),
+          role: "system",
+          text: removed ? `已移除标签: ${normalizedLabel}` : `标签不存在: ${normalizedLabel}`
+        });
+      } catch (error) {
+        commit({ id: nextId(), role: "error", text: error instanceof Error ? error.message : String(error) });
+      } finally {
+        setBusy(false);
+        setStatus(null);
+      }
+    },
+    [commit, currentSession]
+  );
+
+  const submitCombobox = useCallback(
+    (value: string) => {
+      if (!activeCombobox) {
+        return;
+      }
+
+      const selected = resolveComboboxSubmission(value, comboboxOptions, selectedComboboxIndex);
+      if (activeCombobox === "project") {
+        if (selected === CLEAR_PROJECT_OPTION_ID || selected === null) {
+          void applyProjectValue(null);
+          return;
+        }
+        void applyProjectValue(selected);
+        return;
+      }
+
+      if (selected) {
+        void addChatLabelValue(selected);
+      } else {
+        commit({ id: nextId(), role: "system", text: "没有可用标签；请输入新标签。" });
+        closeCombobox();
+      }
+    },
+    [
+      activeCombobox,
+      addChatLabelValue,
+      applyProjectValue,
+      closeCombobox,
+      comboboxOptions,
+      commit,
+      selectedComboboxIndex
+    ]
+  );
 
   const startManualInput = useCallback((prompt: string, mask?: string) => {
     setInput("");
@@ -461,7 +702,7 @@ export function App({
         const restoredModel = data.metadata.model ?? model;
         const restoredEffort = data.metadata.reasoningEffort ?? DEFAULT_REASONING_EFFORT;
         setCurrentSession(restored);
-        setConversationLabel(formatSessionDisplayName(restored.metadata.project, restored.metadata.name));
+        setConversationLabel(formatInputConversationLabel(restored.metadata));
         setCurrentModel(restoredModel);
         setReasoningEffort(restoredEffort);
         setHistory(messagesToHistory(data.messages));
@@ -469,7 +710,7 @@ export function App({
         commit({
           id: nextId(),
           role: "system",
-          text: `已恢复会话: ${formatSessionDisplayName(data.metadata.project, data.metadata.name)}`
+          text: `已恢复会话: ${formatInputConversationLabel(data.metadata)}`
         });
       } catch (error) {
         commit({ id: nextId(), role: "error", text: error instanceof Error ? error.message : String(error) });
@@ -584,6 +825,30 @@ export function App({
       } else {
         exit();
       }
+    }
+
+    if (activeCombobox) {
+      if (key.escape) {
+        commit({
+          id: nextId(),
+          role: "system",
+          text: activeCombobox === "project" ? "已取消项目选择" : "已取消标签选择"
+        });
+        closeCombobox();
+        return;
+      }
+
+      if (!isOptionComboboxTyping(comboboxInput) && key.upArrow) {
+        setComboboxIndex((current) => moveSelection(current, -1, comboboxOptions.length));
+        return;
+      }
+
+      if (!isOptionComboboxTyping(comboboxInput) && key.downArrow) {
+        setComboboxIndex((current) => moveSelection(current, 1, comboboxOptions.length));
+        return;
+      }
+
+      return;
     }
 
     if (activeSelector) {
@@ -725,7 +990,7 @@ export function App({
           try {
             currentSession.renameConversation(rename.name, rename.project);
             await currentSession.persist();
-            const label = formatSessionDisplayName(currentSession.metadata.project, currentSession.metadata.name);
+            const label = formatInputConversationLabel(currentSession.metadata);
             setConversationLabel(label);
             commit({ id: nextId(), role: "system", text: `已重命名: ${label}` });
           } catch (error) {
@@ -733,6 +998,34 @@ export function App({
           } finally {
             setBusy(false);
             setStatus(null);
+          }
+          return;
+        }
+
+        if (slash.command === "/project") {
+          setSlashMenuOpen(false);
+          const project = parseProjectCommandArgs(slash.args);
+          if (!project) {
+            await openProjectCombobox();
+            return;
+          }
+
+          await applyProjectValue(project.project);
+          return;
+        }
+
+        if (slash.command === "/chatlabel") {
+          setSlashMenuOpen(false);
+          const chatLabel = parseChatLabelCommandArgs(slash.args);
+          if (!chatLabel) {
+            await openChatLabelCombobox();
+            return;
+          }
+
+          if (chatLabel.action === "remove") {
+            await removeChatLabelValue(chatLabel.label);
+          } else {
+            await addChatLabelValue(chatLabel.label);
           }
           return;
         }
@@ -830,7 +1123,7 @@ export function App({
           cwd,
           signal: abort.signal
         })) {
-          setConversationLabel(formatSessionDisplayName(currentSession.metadata.project, currentSession.metadata.name));
+          setConversationLabel(formatInputConversationLabel(currentSession.metadata));
           if (event.type === "assistant_text") {
             streamBuffer += event.delta;
             setStreaming(streamBuffer);
@@ -876,6 +1169,8 @@ export function App({
       }
     },
     [
+      addChatLabelValue,
+      applyProjectValue,
       busy,
       commit,
       currentSession,
@@ -886,10 +1181,13 @@ export function App({
       availableModels,
       loadAvailableModels,
       manualCodePrompt,
+      openChatLabelCombobox,
+      openProjectCombobox,
       openSelector,
       openResumeSelector,
       provider,
       reasoningEffort,
+      removeChatLabelValue,
       resolveProvider,
       runTurn,
       tools,
@@ -933,9 +1231,20 @@ export function App({
           width={terminal.columns}
         />
       ) : null}
+      {comboboxVisible ? (
+        <OptionCombobox
+          input={comboboxInput}
+          onChange={setComboboxInput}
+          onSubmit={submitCombobox}
+          options={comboboxOptions}
+          selectedIndex={selectedComboboxIndex}
+          title={activeCombobox === "project" ? "Set project" : "Add label"}
+          width={terminal.columns}
+        />
+      ) : null}
       <InputBar
-        disabled={selectorVisible || (busy && !manualCodePrompt)}
-        disabledLabel={selectorVisible ? "" : undefined}
+        disabled={selectorVisible || comboboxVisible || (busy && !manualCodePrompt)}
+        disabledLabel={selectorVisible || comboboxVisible ? "" : undefined}
         input={input}
         inputMask={manualInputMask}
         manualCodePrompt={manualCodePrompt}

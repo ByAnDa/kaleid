@@ -14,6 +14,7 @@ export interface SessionMetadata {
   reasoningEffort?: ReasoningEffort;
   project: string | null;
   name: string;
+  labels: string[];
   title?: string;
 }
 
@@ -41,6 +42,7 @@ export interface SessionSummary {
   title: string;
   project: string | null;
   name: string;
+  labels: string[];
   label: string;
   createdAt: string;
   updatedAt: string;
@@ -50,6 +52,7 @@ export interface SessionSummary {
 }
 
 export const DEFAULT_SESSION_NAME = "untitled";
+export const DEFAULT_SESSION_LABEL_LIMIT = 3;
 
 export function getSessionDir(): string {
   return process.env.KALEID_SESSIONS_DIR ?? join(homedir(), ".kaleid", "sessions");
@@ -88,6 +91,27 @@ export function normalizeSessionName(name: string | null | undefined): string {
   return trimmed.length > 0 ? trimmed : DEFAULT_SESSION_NAME;
 }
 
+export function normalizeSessionLabel(label: string | null | undefined): string | null {
+  const trimmed = label?.trim().replace(/^#+/u, "") ?? "";
+  return trimmed.length > 0 ? trimmed : null;
+}
+
+export function normalizeSessionLabels(labels: readonly (string | null | undefined)[] | null | undefined): string[] {
+  const normalized: string[] = [];
+  const seen = new Set<string>();
+
+  for (const label of labels ?? []) {
+    const next = normalizeSessionLabel(label);
+    if (!next || seen.has(next)) {
+      continue;
+    }
+    seen.add(next);
+    normalized.push(next);
+  }
+
+  return normalized;
+}
+
 export function sessionNameFromMessage(message: ChatMessage): string | undefined {
   if (message.role !== "user") {
     return undefined;
@@ -114,10 +138,28 @@ function deriveSessionName(metadata: Partial<SessionMetadata>, messages: ChatMes
   return DEFAULT_SESSION_NAME;
 }
 
-export function formatSessionDisplayName(project: string | null | undefined, name: string): string {
+export interface SessionDisplayOptions {
+  maxLabels?: number;
+}
+
+export function formatSessionDisplayName(
+  project: string | null | undefined,
+  name: string,
+  labels: readonly string[] = [],
+  options: SessionDisplayOptions = {}
+): string {
   const normalizedProject = normalizeSessionProject(project);
   const normalizedName = normalizeSessionName(name);
-  return normalizedProject ? `${normalizedProject} - ${normalizedName}` : normalizedName;
+  const base = normalizedProject ? `${normalizedProject} - ${normalizedName}` : normalizedName;
+  const normalizedLabels = normalizeSessionLabels(labels);
+  const labelLimit =
+    options.maxLabels === undefined
+      ? normalizedLabels.length
+      : Math.max(0, Math.min(options.maxLabels, normalizedLabels.length));
+  const visibleLabels = normalizedLabels.slice(0, labelLimit).map((label) => `#${label}`);
+  const hiddenLabelCount = normalizedLabels.length - labelLimit;
+  const labelText = hiddenLabelCount > 0 ? [...visibleLabels, `+${hiddenLabelCount}`] : visibleLabels;
+  return labelText.length > 0 ? `${base} ${labelText.join(" ")}` : base;
 }
 
 export async function appendSessionEntries(id: string, entries: SessionStoreEntry[]): Promise<void> {
@@ -139,7 +181,8 @@ export async function loadSessionData(id: string): Promise<SessionData> {
     createdAt: now,
     updatedAt: now,
     project: null,
-    name: DEFAULT_SESSION_NAME
+    name: DEFAULT_SESSION_NAME,
+    labels: []
   };
   let messages: ChatMessage[] = [];
   let sawStoredName = false;
@@ -176,6 +219,7 @@ export async function loadSessionData(id: string): Promise<SessionData> {
 
   metadata.project = normalizeSessionProject(metadata.project);
   metadata.name = deriveSessionName(sawStoredName ? metadata : { ...metadata, name: undefined }, messages);
+  metadata.labels = normalizeSessionLabels(metadata.labels);
 
   return { id, metadata, messages };
 }
@@ -195,12 +239,15 @@ export async function listSessions(): Promise<SessionSummary[]> {
       const data = await loadSessionData(id);
       const fileStat = await stat(sessionPath(id));
       const updatedAt = data.metadata.updatedAt || fileStat.mtime.toISOString();
-      const label = formatSessionDisplayName(data.metadata.project, data.metadata.name);
+      const label = formatSessionDisplayName(data.metadata.project, data.metadata.name, data.metadata.labels, {
+        maxLabels: DEFAULT_SESSION_LABEL_LIMIT
+      });
       summaries.push({
         id,
         title: label,
         project: data.metadata.project,
         name: data.metadata.name,
+        labels: data.metadata.labels,
         label,
         createdAt: data.metadata.createdAt,
         updatedAt,
@@ -214,6 +261,43 @@ export async function listSessions(): Promise<SessionSummary[]> {
   }
 
   return summaries.sort((a, b) => Date.parse(b.updatedAt) - Date.parse(a.updatedAt));
+}
+
+export interface SessionMetadataOptions {
+  projects: string[];
+  labels: string[];
+}
+
+export async function listSessionMetadataOptions(): Promise<SessionMetadataOptions> {
+  await mkdir(getSessionDir(), { recursive: true, mode: 0o700 });
+  const files = await readdir(getSessionDir());
+  const projects = new Set<string>();
+  const labels = new Set<string>();
+
+  for (const file of files) {
+    if (!file.endsWith(".jsonl")) {
+      continue;
+    }
+
+    const id = file.slice(0, -".jsonl".length);
+    try {
+      const data = await loadSessionData(id);
+      const project = normalizeSessionProject(data.metadata.project);
+      if (project) {
+        projects.add(project);
+      }
+      for (const label of normalizeSessionLabels(data.metadata.labels)) {
+        labels.add(label);
+      }
+    } catch {
+      continue;
+    }
+  }
+
+  return {
+    projects: [...projects].sort((a, b) => a.localeCompare(b)),
+    labels: [...labels].sort((a, b) => a.localeCompare(b))
+  };
 }
 
 export async function loadLatestSession(): Promise<SessionData | null> {

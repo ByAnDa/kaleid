@@ -4,6 +4,8 @@ import {
   DEFAULT_SESSION_NAME,
   appendSessionEntries,
   normalizeSessionName,
+  normalizeSessionLabel,
+  normalizeSessionLabels,
   normalizeSessionProject,
   sessionNameFromMessage,
   type SessionMetadata,
@@ -39,6 +41,9 @@ export interface Session {
   metadata: SessionMetadata;
   append(msg: ChatMessage): void;
   renameConversation(name: string, project?: string | null): void;
+  setProject(project: string | null): void;
+  addLabel(label: string): boolean;
+  removeLabel(label: string): boolean;
   setRunState(model: string, reasoningEffort?: ReasoningEffort): void;
   refreshTokenEstimate(model: string, systemPrompt?: string): TokenState;
   updateTokenUsage(model: string, usage: TokenUsage, systemPrompt?: string): TokenState;
@@ -117,6 +122,7 @@ class MemorySession implements Session {
       reasoningEffort: options.metadata?.reasoningEffort,
       project: normalizeSessionProject(options.metadata?.project),
       name,
+      labels: normalizeSessionLabels(options.metadata?.labels),
       title: options.metadata?.title
     };
     this.metaDirty = !options.persisted;
@@ -164,6 +170,50 @@ class MemorySession implements Session {
     this.metadata.updatedAt = nowIso();
     this.metaDirty = true;
     this.canAutoname = false;
+  }
+
+  setProject(project: string | null): void {
+    const nextProject = normalizeSessionProject(project);
+    if (this.metadata.project === nextProject) {
+      return;
+    }
+
+    this.metadata.project = nextProject;
+    this.metadata.updatedAt = nowIso();
+    this.metaDirty = true;
+  }
+
+  addLabel(label: string): boolean {
+    const nextLabel = normalizeSessionLabel(label);
+    if (!nextLabel) {
+      throw new Error("Conversation label cannot be empty");
+    }
+
+    if (this.metadata.labels.includes(nextLabel)) {
+      return false;
+    }
+
+    this.metadata.labels = [...this.metadata.labels, nextLabel];
+    this.metadata.updatedAt = nowIso();
+    this.metaDirty = true;
+    return true;
+  }
+
+  removeLabel(label: string): boolean {
+    const targetLabel = normalizeSessionLabel(label);
+    if (!targetLabel) {
+      throw new Error("Conversation label cannot be empty");
+    }
+
+    const nextLabels = this.metadata.labels.filter((labelValue) => labelValue !== targetLabel);
+    if (nextLabels.length === this.metadata.labels.length) {
+      return false;
+    }
+
+    this.metadata.labels = nextLabels;
+    this.metadata.updatedAt = nowIso();
+    this.metaDirty = true;
+    return true;
   }
 
   setRunState(model: string, reasoningEffort?: ReasoningEffort): void {

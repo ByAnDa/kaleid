@@ -27,6 +27,14 @@ export interface RenameCommandArgs {
   project?: string | null;
 }
 
+export interface ProjectCommandArgs {
+  project: string;
+}
+
+export type ChatLabelCommandArgs =
+  | { action: "add"; label: string }
+  | { action: "remove"; label: string };
+
 type LoginFn = (options?: OAuthOptions) => Promise<Creds>;
 type LoadFn = () => Promise<Creds | null>;
 type SaveFn = (creds: Creds) => Promise<void>;
@@ -48,6 +56,8 @@ export const SLASH_COMMANDS: SlashCommandDefinition[] = [
   { command: "/compact", description: "Compact conversation context" },
   { command: "/resume", description: "Resume a saved session" },
   { command: "/rename", description: "Rename the current conversation" },
+  { command: "/project", description: "Set the current conversation project" },
+  { command: "/chatlabel", description: "Add or remove conversation labels" },
   { command: "/exit", description: "Exit kaleid" },
   { command: "/help", description: "Show available slash commands" }
 ];
@@ -97,6 +107,22 @@ export function parseRenameCommandArgs(args: string[]): RenameCommandArgs | null
   };
 }
 
+export function parseProjectCommandArgs(args: string[]): ProjectCommandArgs | null {
+  const project = args.join(" ").trim();
+  return project ? { project } : null;
+}
+
+export function parseChatLabelCommandArgs(args: string[]): ChatLabelCommandArgs | null {
+  const [first, ...rest] = args;
+  if (first === "remove") {
+    const label = rest.join(" ").trim();
+    return label ? { action: "remove", label } : null;
+  }
+
+  const label = args.join(" ").trim();
+  return label ? { action: "add", label } : null;
+}
+
 export async function runSlashCommand(
   parsed: ParsedSlashCommand,
   context: SlashCommandContext = {}
@@ -138,7 +164,9 @@ export async function runSlashCommand(
     parsed.command === "/reasoning" ||
     parsed.command === "/compact" ||
     parsed.command === "/resume" ||
-    parsed.command === "/rename"
+    parsed.command === "/rename" ||
+    parsed.command === "/project" ||
+    parsed.command === "/chatlabel"
   ) {
     return {
       action: "continue",

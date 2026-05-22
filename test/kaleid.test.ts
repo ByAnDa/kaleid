@@ -38,17 +38,34 @@ import type { ChatParams, LLMProvider, StreamEvent } from "../src/provider/types
 import { runTurn } from "../src/loop/agent-loop.js";
 import { createSession } from "../src/loop/session.js";
 import { COMPACTION_SUMMARY_PREFIX } from "../src/loop/compaction.js";
-import { formatSessionDisplayName, listSessions, loadSessionData } from "../src/loop/session-store.js";
+import {
+  formatSessionDisplayName,
+  listSessionMetadataOptions,
+  listSessions,
+  loadSessionData,
+  normalizeSessionLabels
+} from "../src/loop/session-store.js";
 import { bashTool } from "../src/tools/bash.js";
 import { executeBash } from "../src/tools/bash-executor.js";
 import { editTool } from "../src/tools/edit.js";
 import { readTool } from "../src/tools/read.js";
 import { writeTool } from "../src/tools/write.js";
-import { getSlashCommandCompletions, parseRenameCommandArgs, parseSlash, runSlashCommand } from "../src/tui/commands.js";
 import {
+  getSlashCommandCompletions,
+  parseChatLabelCommandArgs,
+  parseProjectCommandArgs,
+  parseRenameCommandArgs,
+  parseSlash,
+  runSlashCommand
+} from "../src/tui/commands.js";
+import {
+  buildChatLabelComboboxOptions,
+  buildProjectComboboxOptions,
   applySelectorTransition,
   cancelSelectorTransition,
+  CLEAR_PROJECT_OPTION_ID,
   resumeToOption,
+  resolveComboboxSubmission,
   resolveSlashEnterSubmission
 } from "../src/tui/app.js";
 import {
@@ -58,6 +75,7 @@ import {
 import { formatHeaderState, truncateHeaderState } from "../src/tui/components/Header.js";
 import { formatTokenStatus, getInputBarHeight, truncateConversationLabel } from "../src/tui/components/InputBar.js";
 import { getMessageStyle } from "../src/tui/components/Message.js";
+import { formatOptionComboboxLine, getOptionComboboxHeight } from "../src/tui/components/OptionCombobox.js";
 import { formatOptionSelectorLine, getOptionSelectorHeight } from "../src/tui/components/OptionSelector.js";
 import { formatToolCallLine } from "../src/tui/components/ToolCall.js";
 import {
@@ -271,6 +289,8 @@ test("slash command parser and dispatcher handle help, unknown, logout, and logi
     "/compact",
     "/resume",
     "/rename",
+    "/project",
+    "/chatlabel",
     "/exit",
     "/help"
   ]);
@@ -292,6 +312,8 @@ test("slash command parser and dispatcher handle help, unknown, logout, and logi
   assert.match(help.messages[0] ?? "", /\/compact/u);
   assert.match(help.messages[0] ?? "", /\/resume/u);
   assert.match(help.messages[0] ?? "", /\/rename/u);
+  assert.match(help.messages[0] ?? "", /\/project/u);
+  assert.match(help.messages[0] ?? "", /\/chatlabel/u);
   assert.match(help.messages[0] ?? "", /\/exit/u);
   assert.match(help.messages[0] ?? "", /\/help/u);
   assert.deepEqual(parseRenameCommandArgs(["我的重构任务"]), { name: "我的重构任务" });
@@ -299,6 +321,12 @@ test("slash command parser and dispatcher handle help, unknown, logout, and logi
   assert.deepEqual(parseRenameCommandArgs(["/无项目名称"]), { project: null, name: "无项目名称" });
   assert.equal(parseRenameCommandArgs([]), null);
   assert.equal(parseRenameCommandArgs(["kaleid/"]), null);
+  assert.deepEqual(parseProjectCommandArgs(["kaleid", "cli"]), { project: "kaleid cli" });
+  assert.equal(parseProjectCommandArgs([]), null);
+  assert.deepEqual(parseChatLabelCommandArgs(["bug"]), { action: "add", label: "bug" });
+  assert.deepEqual(parseChatLabelCommandArgs(["new", "ui"]), { action: "add", label: "new ui" });
+  assert.deepEqual(parseChatLabelCommandArgs(["remove", "bug"]), { action: "remove", label: "bug" });
+  assert.equal(parseChatLabelCommandArgs(["remove"]), null);
 
   const unknown = await runSlashCommand({ command: "/wat", args: [] });
   assert.deepEqual(unknown.messages, ["unknown command: /wat\nRun /help to see available slash commands."]);
@@ -490,9 +518,15 @@ test("TUI header and option selector format model and reasoning state", () => {
   assert.equal(formatHeaderState("kimi-for-coding", null, "kimi"), "kimi-for-coding [kimi] · -");
   assert.equal(truncateHeaderState("gpt-5.5-pro · medium", 12), "gpt-5.5-p...");
   assert.equal(getOptionSelectorHeight(5), 8);
+  assert.equal(getOptionComboboxHeight(3, ""), 7);
+  assert.equal(getOptionComboboxHeight(3, "new"), 4);
   assert.equal(
     formatOptionSelectorLine({ id: "gpt-5.5", current: true }, true),
     "> * gpt-5.5 (current)"
+  );
+  assert.equal(
+    formatOptionComboboxLine({ id: CLEAR_PROJECT_OPTION_ID, display: "(无项目)", current: false }, true),
+    ">   (无项目)"
   );
   assert.equal(formatOptionSelectorLine({ id: "high", current: false }, false), "    high");
   assert.equal(
@@ -505,6 +539,7 @@ test("TUI header and option selector format model and reasoning state", () => {
       title: "kaleid - 修复登录",
       project: "kaleid",
       name: "修复登录",
+      labels: ["bug", "urgent"],
       label: "kaleid - 修复登录",
       createdAt: "2026-05-22T00:00:00.000Z",
       updatedAt: "2026-05-22T00:00:00.000Z",
@@ -516,6 +551,23 @@ test("TUI header and option selector format model and reasoning state", () => {
       display: "kaleid - 修复登录 · gpt-5.5",
       current: false
     }
+  );
+  assert.deepEqual(buildProjectComboboxOptions(["work", "kaleid", "work"], "kaleid"), [
+    { id: CLEAR_PROJECT_OPTION_ID, display: "(无项目)", current: false },
+    { id: "kaleid", current: true },
+    { id: "work", current: false }
+  ]);
+  assert.deepEqual(buildChatLabelComboboxOptions(["bug", "urgent", "#bug"], ["bug"]), [
+    { id: "bug", current: true },
+    { id: "urgent", current: false }
+  ]);
+  assert.equal(
+    resolveComboboxSubmission("", [{ id: "kaleid", current: false }], 0),
+    "kaleid"
+  );
+  assert.equal(
+    resolveComboboxSubmission("new project", [{ id: "kaleid", current: false }], 0),
+    "new project"
   );
 });
 
@@ -639,6 +691,12 @@ test("TUI input footer reserves rows for status, slash menu, and OAuth paste mod
   );
   assert.equal(formatSessionDisplayName(null, "修复登录"), "修复登录");
   assert.equal(formatSessionDisplayName("kaleid", "修复登录"), "kaleid - 修复登录");
+  assert.deepEqual(normalizeSessionLabels([" bug ", "#urgent", "bug", "", null]), ["bug", "urgent"]);
+  assert.equal(formatSessionDisplayName("kaleid", "修复登录", ["bug", "urgent"]), "kaleid - 修复登录 #bug #urgent");
+  assert.equal(
+    formatSessionDisplayName("kaleid", "修复登录", ["bug", "urgent", "qa"], { maxLabels: 2 }),
+    "kaleid - 修复登录 #bug #urgent +1"
+  );
   assert.equal(truncateConversationLabel("kaleid - 修复登录", 12), "kaleid -...");
   assert.equal(truncateConversationLabel("abcdef", 2), "..");
 });
@@ -1319,26 +1377,42 @@ test("session persistence writes jsonl and resume rebuilds compacted messages", 
     assert.equal(restored.metadata.reasoningEffort, "high");
     assert.equal(restored.metadata.project, null);
     assert.equal(restored.metadata.name, "first task");
+    assert.deepEqual(restored.metadata.labels, []);
     assert.deepEqual(restored.messages.map((message) => message.content), ["first task", "first answer"]);
 
     const renamed = createSession({ id: "session_test", messages: restored.messages, metadata: restored.metadata, persisted: true });
     renamed.renameConversation("修复登录", "kaleid");
+    assert.equal(renamed.addLabel("bug"), true);
+    assert.equal(renamed.addLabel("#urgent"), true);
+    assert.equal(renamed.addLabel("bug"), false);
     await renamed.persist();
 
     const renamedData = await loadSessionData("session_test");
     assert.equal(renamedData.metadata.project, "kaleid");
     assert.equal(renamedData.metadata.name, "修复登录");
+    assert.deepEqual(renamedData.metadata.labels, ["bug", "urgent"]);
     const entries = (await readFile(join(dir, "session_test.jsonl"), "utf8"))
       .trim()
       .split(/\r?\n/u)
-      .map((line) => JSON.parse(line) as { type: string; metadata?: { project?: string | null; name?: string } });
+      .map((line) => JSON.parse(line) as { type: string; metadata?: { project?: string | null; name?: string; labels?: string[] } });
     const lastMeta = entries.filter((entry) => entry.type === "meta").at(-1);
     assert.equal(lastMeta?.metadata?.project, "kaleid");
     assert.equal(lastMeta?.metadata?.name, "修复登录");
+    assert.deepEqual(lastMeta?.metadata?.labels, ["bug", "urgent"]);
     const renamedSummaries = await listSessions();
-    assert.equal(renamedSummaries[0]?.label, "kaleid - 修复登录");
+    assert.equal(renamedSummaries[0]?.label, "kaleid - 修复登录 #bug #urgent");
+    const metadataOptions = await listSessionMetadataOptions();
+    assert.deepEqual(metadataOptions, { projects: ["kaleid"], labels: ["bug", "urgent"] });
 
-    const compacted = createSession({ id: "session_test", messages: renamedData.messages, metadata: renamedData.metadata, persisted: true });
+    const labeled = createSession({ id: "session_test", messages: renamedData.messages, metadata: renamedData.metadata, persisted: true });
+    assert.equal(labeled.removeLabel("bug"), true);
+    assert.equal(labeled.removeLabel("missing"), false);
+    await labeled.persist();
+
+    const labeledData = await loadSessionData("session_test");
+    assert.deepEqual(labeledData.metadata.labels, ["urgent"]);
+
+    const compacted = createSession({ id: "session_test", messages: labeledData.messages, metadata: labeledData.metadata, persisted: true });
     const provider: LLMProvider = {
       id: "fake",
       async *chat(): AsyncIterable<StreamEvent> {
