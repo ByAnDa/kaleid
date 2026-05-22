@@ -26,6 +26,7 @@ export interface InputBarProps extends InputBarLayoutState {
   disabledLabel?: string;
   input: string;
   inputMask?: string;
+  inputPrompt?: string;
   onChange: (value: string) => void;
   onSubmit?: (value: string) => void;
   selectedSlashIndex: number;
@@ -117,6 +118,7 @@ export function InputBar({
   disabledLabel,
   input,
   inputMask,
+  inputPrompt,
   manualCodePrompt,
   onChange,
   onSubmit,
@@ -127,8 +129,9 @@ export function InputBar({
   status,
   width
 }: InputBarProps): React.ReactElement {
-  const prompt = manualCodePrompt ? "input> " : "› ";
-  const borderColor = manualCodePrompt ? "yellow" : disabled ? "gray" : "green";
+  const prompt = inputPrompt ?? (manualCodePrompt ? "input> " : "› ");
+  const borderColor = inputPrompt ? "cyan" : manualCodePrompt ? "yellow" : disabled ? "gray" : "green";
+  const promptColor = inputPrompt ? "cyan" : manualCodePrompt ? "yellow" : "green";
   const labelMaxWidth = Math.max(0, Math.min(48, width - 12));
   const label = truncateConversationLabel(conversationLabel, labelMaxWidth);
 
@@ -144,7 +147,7 @@ export function InputBar({
       <Box borderStyle="round" borderColor={borderColor} height={3} paddingX={1} width={width}>
         <Box flexDirection="row" width="100%">
           <Box flexGrow={1} minWidth={0}>
-            <Text bold color={manualCodePrompt ? "yellow" : "green"}>
+            <Text bold color={promptColor}>
               {prompt}
             </Text>
             {disabled ? (

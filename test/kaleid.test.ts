@@ -72,8 +72,12 @@ import {
   CLEAR_RESUME_FILTER_OPTION_ID,
   EMPTY_RESUME_OPTION_ID,
   formatResumeFilterValue,
+  getRenameInputPrefill,
+  parseRenameInputValue,
+  RENAME_INPUT_PROMPT,
   resumeToOption,
   resolveComboboxSubmission,
+  resolveRenameSlashAction,
   resolveSlashEnterSubmission
 } from "../src/tui/app.js";
 import {
@@ -329,6 +333,13 @@ test("slash command parser and dispatcher handle help, unknown, logout, and logi
   assert.deepEqual(parseRenameCommandArgs(["/无项目名称"]), { project: null, name: "无项目名称" });
   assert.equal(parseRenameCommandArgs([]), null);
   assert.equal(parseRenameCommandArgs(["kaleid/"]), null);
+  assert.equal(RENAME_INPUT_PROMPT, "输入对话名称（可 项目/名称）：");
+  assert.equal(getRenameInputPrefill({ name: "当前名称" }), "当前名称");
+  assert.deepEqual(resolveRenameSlashAction([], "当前名称"), { kind: "input", initialValue: "当前名称" });
+  assert.deepEqual(resolveRenameSlashAction(["新名称"], "当前名称"), { kind: "rename", rename: { name: "新名称" } });
+  assert.deepEqual(resolveRenameSlashAction(["kaleid/"], "当前名称"), { kind: "invalid" });
+  assert.deepEqual(parseRenameInputValue("kaleid/修复 登录"), { project: "kaleid", name: "修复 登录" });
+  assert.deepEqual(parseRenameInputValue("/无项目名称"), { project: null, name: "无项目名称" });
   assert.deepEqual(parseProjectCommandArgs(["kaleid", "cli"]), { project: "kaleid cli" });
   assert.equal(parseProjectCommandArgs([]), null);
   assert.deepEqual(parseChatLabelCommandArgs(["bug"]), { action: "add", label: "bug" });

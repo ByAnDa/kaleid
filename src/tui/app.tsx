@@ -40,6 +40,7 @@ import {
   parseRenameCommandArgs,
   parseSlash,
   runSlashCommand,
+  type RenameCommandArgs,
   type SlashCommandDefinition
 } from "./commands.js";
 import { Conversation } from "./components/Conversation.js";
@@ -117,10 +118,15 @@ export type ResumeFilterFocus = "project" | "label" | "sessions";
 export type SelectorKind = "model" | "reasoning" | "login" | "resume" | "resumeProjectFilter" | "resumeLabelFilter";
 export type SelectorFlow = "standalone" | "modelEffortChain";
 export type ComboboxKind = "project" | "chatlabel";
+export type RenameSlashAction =
+  | { kind: "input"; initialValue: string }
+  | { kind: "rename"; rename: RenameCommandArgs }
+  | { kind: "invalid" };
 
 export const CLEAR_PROJECT_OPTION_ID = "__clear_project__";
 export const CLEAR_RESUME_FILTER_OPTION_ID = "__clear_resume_filter__";
 export const EMPTY_RESUME_OPTION_ID = "__empty_resume__";
+export const RENAME_INPUT_PROMPT = "输入对话名称（可 项目/名称）：";
 
 const DEFAULT_RESUME_FILTER: ResumeFilterState = { project: null, label: null };
 const EMPTY_SESSION_METADATA_OPTIONS: SessionMetadataOptions = { projects: [], labels: [] };
@@ -318,6 +324,27 @@ export function resolveComboboxSubmission(
   return options[selectedIndex]?.id ?? null;
 }
 
+export function getRenameInputPrefill(metadata: Pick<SessionMetadata, "name">): string {
+  return metadata.name;
+}
+
+export function parseRenameInputValue(input: string): RenameCommandArgs | null {
+  return parseRenameCommandArgs([input]);
+}
+
+export function resolveRenameSlashAction(args: readonly string[], currentName: string): RenameSlashAction {
+  const rename = parseRenameCommandArgs([...args]);
+  if (rename) {
+    return { kind: "rename", rename };
+  }
+
+  if (args.length === 0) {
+    return { kind: "input", initialValue: currentName };
+  }
+
+  return { kind: "invalid" };
+}
+
 const LOGIN_OPTIONS: OptionSelectorItem[] = [
   { id: "openai-codex", label: "OpenAI Codex OAuth", provider: "openai-codex", current: false },
   { id: "deepseek", label: "DeepSeek API key", provider: "deepseek", current: false },
@@ -480,6 +507,7 @@ export function App({
   const [comboboxOptions, setComboboxOptions] = useState<OptionComboboxItem[]>([]);
   const [comboboxIndex, setComboboxIndex] = useState(0);
   const [comboboxInput, setComboboxInput] = useState("");
+  const [renameInputActive, setRenameInputActive] = useState(false);
   const [busy, setBusy] = useState(false);
   const [manualCodePrompt, setManualCodePrompt] = useState<string | null>(null);
   const abortRef = useRef<AbortController | null>(null);
@@ -487,7 +515,13 @@ export function App({
   const slashCompletions = useMemo(() => getSlashCommandCompletions(input), [input]);
   const slashCandidates = slashCompletions ?? [];
   const slashMenuVisible =
-    !busy && !manualCodePrompt && !activeSelector && !activeCombobox && slashMenuOpen && slashCompletions !== null;
+    !busy &&
+    !manualCodePrompt &&
+    !activeSelector &&
+    !activeCombobox &&
+    !renameInputActive &&
+    slashMenuOpen &&
+    slashCompletions !== null;
   const selectedSlashIndex = slashCandidates.length === 0 ? -1 : Math.min(slashMenuIndex, slashCandidates.length - 1);
   const currentProvider = useMemo(
     () => getProviderForModel(currentModel, availableModels),
@@ -561,6 +595,11 @@ export function App({
     }
 
     setInput(value);
+    if (renameInputActive) {
+      setSlashMenuOpen(false);
+      return;
+    }
+
     if (manualCodePrompt) {
       setSlashMenuOpen(false);
       return;
@@ -572,7 +611,7 @@ export function App({
     } else {
       setSlashMenuOpen(false);
     }
-  }, [activeCombobox, activeSelector, manualCodePrompt]);
+  }, [activeCombobox, activeSelector, manualCodePrompt, renameInputActive]);
 
   const completeSlashCommand = useCallback(() => {
     const selected = slashCandidates[selectedSlashIndex];
@@ -627,6 +666,20 @@ export function App({
     setComboboxInput("");
   }, []);
 
+  const closeRenameInput = useCallback(() => {
+    setRenameInputActive(false);
+    setInput("");
+    setSlashMenuOpen(false);
+    setSlashMenuIndex(0);
+  }, []);
+
+  const openRenameInput = useCallback(() => {
+    setInput(getRenameInputPrefill(currentSession.metadata));
+    setRenameInputActive(true);
+    setSlashMenuOpen(false);
+    setSlashMenuIndex(0);
+  }, [currentSession]);
+
   const openProjectCombobox = useCallback(async () => {
     setBusy(true);
     setStatus("loading projects...");
@@ -666,6 +719,33 @@ export function App({
       setStatus(null);
     }
   }, [commit, currentSession]);
+
+  const applyRenameValue = useCallback(
+    async (value: string) => {
+      const rename = parseRenameInputValue(value);
+      if (!rename) {
+        commit({ id: nextId(), role: "system", text: "对话名称不能为空" });
+        return;
+      }
+
+      closeRenameInput();
+      setBusy(true);
+      setStatus("renaming session...");
+      try {
+        currentSession.renameConversation(rename.name, rename.project);
+        await currentSession.persist();
+        const label = formatInputConversationLabel(currentSession.metadata);
+        setConversationLabel(label);
+        commit({ id: nextId(), role: "system", text: `已重命名: ${label}` });
+      } catch (error) {
+        commit({ id: nextId(), role: "error", text: error instanceof Error ? error.message : String(error) });
+      } finally {
+        setBusy(false);
+        setStatus(null);
+      }
+    },
+    [closeRenameInput, commit, currentSession]
+  );
 
   const applyProjectValue = useCallback(
     async (project: string | null) => {
@@ -1020,6 +1100,14 @@ export function App({
       }
     }
 
+    if (renameInputActive) {
+      if (key.escape) {
+        commit({ id: nextId(), role: "system", text: "已取消重命名" });
+        closeRenameInput();
+      }
+      return;
+    }
+
     if (activeCombobox) {
       if (key.escape) {
         commit({
@@ -1184,6 +1272,11 @@ export function App({
 
   const submit = useCallback(
     async (value: string) => {
+      if (renameInputActive) {
+        await applyRenameValue(value);
+        return;
+      }
+
       if (manualCodePrompt) {
         if (!value.trim()) {
           return;
@@ -1254,8 +1347,12 @@ export function App({
 
         if (slash.command === "/rename") {
           setSlashMenuOpen(false);
-          const rename = parseRenameCommandArgs(slash.args);
-          if (!rename) {
+          const action = resolveRenameSlashAction(slash.args, getRenameInputPrefill(currentSession.metadata));
+          if (action.kind === "input") {
+            openRenameInput();
+            return;
+          }
+          if (action.kind === "invalid") {
             commit({ id: nextId(), role: "system", text: "用法: /rename <名称> 或 /rename <项目>/<名称>" });
             return;
           }
@@ -1263,7 +1360,7 @@ export function App({
           setBusy(true);
           setStatus("renaming session...");
           try {
-            currentSession.renameConversation(rename.name, rename.project);
+            currentSession.renameConversation(action.rename.name, action.rename.project);
             await currentSession.persist();
             const label = formatInputConversationLabel(currentSession.metadata);
             setConversationLabel(label);
@@ -1445,6 +1542,7 @@ export function App({
     },
     [
       addChatLabelValue,
+      applyRenameValue,
       applyProjectValue,
       busy,
       commit,
@@ -1458,10 +1556,12 @@ export function App({
       manualCodePrompt,
       openChatLabelCombobox,
       openProjectCombobox,
+      openRenameInput,
       openSelector,
       openResumeSelector,
       provider,
       reasoningEffort,
+      renameInputActive,
       removeChatLabelValue,
       resolveProvider,
       runTurn,
@@ -1529,6 +1629,7 @@ export function App({
         disabledLabel={selectorVisible || comboboxVisible ? "" : undefined}
         input={input}
         inputMask={manualInputMask}
+        inputPrompt={renameInputActive ? RENAME_INPUT_PROMPT : undefined}
         manualCodePrompt={manualCodePrompt}
         onChange={updateInput}
         onSubmit={slashMenuVisible || selectorVisible ? undefined : submit}
