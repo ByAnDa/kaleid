@@ -784,7 +784,7 @@ test("TUI header and option selector format model and reasoning state", () => {
   assert.equal(formatHeaderState("gpt-5.5", "high"), "gpt-5.5 · high");
   assert.equal(formatHeaderState("kimi-for-coding", null, "kimi"), "kimi-for-coding [kimi] · -");
   assert.equal(truncateHeaderState("gpt-5.5-pro · medium", 12), "gpt-5.5-p...");
-  assert.match(buildWelcomeIntroText("gpt-5.5", "high"), /^kaleid v0\.0\.12 · gpt-5\.5 · high/u);
+  assert.match(buildWelcomeIntroText("gpt-5.5", "high"), /^kaleid v0\.0\.13 · gpt-5\.5 · high/u);
   assert.equal(getOptionSelectorHeight(5), 8);
   assert.equal(getResumeSelectorHeight(5), 8);
   assert.equal(getResumeSelectorHeight(5, true), 9);
