@@ -170,8 +170,14 @@ Reviewer: ByAnDa
 ### spec-018 — resume project/label 筛选（待审核）
 - resume 选择器顶部加筛选栏 project（默认全部）+ label（默认全部）；选中进入对应列表选一个后返回、只显示该 project/label 的对话；两维 AND；选"全部"清除。详见 `kaleid spec-018 resume-filter.md`。
 
-### spec-020 — 设计重构 + Daylight/Spectrum 双主题 + token 系统 + 多行输入（待审核）
-- 按 Claude Design bundle 重做全屏 TUI：移植语义 token（surface/text/border/accent/role/status/tag/project）；双主题 Daylight(浅)/Spectrum(深)，**默认跟随终端**；**truecolor + 256/16 降级 fallback**；角色 gutter 色条 + 前缀 + tag/project 色块徽章；多行输入；`/theme` 切换；不实现 OS 窗口 chrome。设计 bundle 经 URL fetch、不入公开 repo。详见 `kaleid spec-020 design-restyle-themes.md`。
+### spec-022 — TUI 布局精修（待审核）
+- 对当前全屏 TUI 的 6 项布局/视觉精修（**不改功能**）：①对话区从屏幕最顶端开始（去固定 Header），欢迎/介绍作对话首条随上滚消失，类似 Claude Code；②左侧角色 gutter 改单列最细竖线 `▏`（两主题统一，弃 2 字宽实心块）；③相邻消息之间空 1 行（终端最小可行间隔）；④色条每条一整条连续、空行不画色条、消除叠块/错位；⑤底部输入框多行时整框增高、边框闭合、下方无缺口；⑥对话名·项目·label·model·effort 移到底部输入框上沿一行，强制单行不换行，超长在对话名末尾用 `…` 截断。详见 `kaleid spec-022 tui-layout-polish.md`。
+
+### spec-021 — 应用真实设计配色 + 像素贴合（已完成，待发 0.0.12）
+- 修 spec-020 占位色：用 `design/kaleid/project/kaleid-tokens.js` 精确 token 逐值替换 daylight/spectrum + 按 screenshots 像素贴合（WelcomeBanner / ResumeScreen filter chips·grid / chat 正文走主题色、role 色仅 gutter·label）。设计 bundle 已 commit 到 repo `design/kaleid/`（排除私有 uploads）。详见 `kaleid spec-021 apply-real-design-colors.md`。
+
+### spec-020 — 设计重构 + Daylight/Spectrum 双主题 + token 系统 + 多行输入（已完成，待发 0.0.12）
+- 按 Claude Design bundle 重做全屏 TUI：移植语义 token（surface/text/border/accent/role/status/tag/project）；双主题 Daylight(浅)/Spectrum(深)，**默认跟随终端**；**truecolor + 256/16 降级 fallback**；角色 gutter 色条 + 前缀 + tag/project 色块徽章；多行输入；`/theme` 切换；不实现 OS 窗口 chrome。设计 bundle 经 URL fetch（spec-021 起改 commit 到 repo `design/kaleid/`）。详见 `kaleid spec-020 design-restyle-themes.md`。
 
 ### spec-019 — 命令无参进入交互输入（待审核）
 - `/rename` 无参时进入交互输入态（预填当前名、可 项目/名称），不只靠后置参数；/project //chatlabel 已是 combobox（无参进交互）。三命令一致：无参进交互、带参直接设。详见 `kaleid spec-019 command-interactive-input.md`。
