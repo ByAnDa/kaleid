@@ -22,6 +22,11 @@ export interface SlashCommandDefinition {
   description: string;
 }
 
+export interface RenameCommandArgs {
+  name: string;
+  project?: string | null;
+}
+
 type LoginFn = (options?: OAuthOptions) => Promise<Creds>;
 type LoadFn = () => Promise<Creds | null>;
 type SaveFn = (creds: Creds) => Promise<void>;
@@ -42,6 +47,7 @@ export const SLASH_COMMANDS: SlashCommandDefinition[] = [
   { command: "/reasoning", description: "Select reasoning effort" },
   { command: "/compact", description: "Compact conversation context" },
   { command: "/resume", description: "Resume a saved session" },
+  { command: "/rename", description: "Rename the current conversation" },
   { command: "/exit", description: "Exit kaleid" },
   { command: "/help", description: "Show available slash commands" }
 ];
@@ -66,6 +72,29 @@ export function getSlashCommandCompletions(input: string): SlashCommandDefinitio
   }
 
   return SLASH_COMMANDS.filter((command) => command.command.startsWith(input));
+}
+
+export function parseRenameCommandArgs(args: string[]): RenameCommandArgs | null {
+  const value = args.join(" ").trim();
+  if (!value) {
+    return null;
+  }
+
+  const slashIndex = value.indexOf("/");
+  if (slashIndex < 0) {
+    return { name: value };
+  }
+
+  const project = value.slice(0, slashIndex).trim();
+  const name = value.slice(slashIndex + 1).trim();
+  if (!name) {
+    return null;
+  }
+
+  return {
+    project: project.length > 0 ? project : null,
+    name
+  };
 }
 
 export async function runSlashCommand(
@@ -104,7 +133,13 @@ export async function runSlashCommand(
     };
   }
 
-  if (parsed.command === "/model" || parsed.command === "/reasoning" || parsed.command === "/compact" || parsed.command === "/resume") {
+  if (
+    parsed.command === "/model" ||
+    parsed.command === "/reasoning" ||
+    parsed.command === "/compact" ||
+    parsed.command === "/resume" ||
+    parsed.command === "/rename"
+  ) {
     return {
       action: "continue",
       messages: [`${parsed.command} is available in the interactive TUI.`]
