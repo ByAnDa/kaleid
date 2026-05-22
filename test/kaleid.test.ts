@@ -82,11 +82,14 @@ import {
 } from "../src/tui/app.js";
 import {
   buildConversationEntries,
+  estimateConversationRows,
   getVisibleConversationEntries
 } from "../src/tui/components/Conversation.js";
-import { formatHeaderState, truncateHeaderState } from "../src/tui/components/Header.js";
+import { buildWelcomeIntroText, formatHeaderState, truncateHeaderState } from "../src/tui/components/Header.js";
 import { formatTokenStatus, getInputBarHeight, truncateConversationLabel } from "../src/tui/components/InputBar.js";
 import { getMessageStyle } from "../src/tui/components/Message.js";
+import { ROLE_GUTTER_SYMBOL } from "../src/tui/components/RoleGutter.js";
+import { buildStatusLineLayout, formatStatusModel } from "../src/tui/components/StatusLine.js";
 import { getProjectTokenName, getTagTokenName } from "../src/tui/components/Badges.js";
 import {
   MULTILINE_INPUT_NEWLINE_HINT,
@@ -528,10 +531,11 @@ test("TUI conversation keeps newest messages pinned to the bottom", () => {
     text: `message ${index + 1}`
   }));
 
-  const visible = getVisibleConversationEntries(buildConversationEntries(messages, null), 3, 40);
+  const visible = getVisibleConversationEntries(buildConversationEntries(messages, null), 5, 40);
   assert.deepEqual(visible.map((entry) => entry.id), ["m4", "m5", "m6"]);
+  assert.equal(estimateConversationRows(visible, 40), 5);
 
-  const withStreaming = getVisibleConversationEntries(buildConversationEntries(messages, "streaming answer"), 2, 40);
+  const withStreaming = getVisibleConversationEntries(buildConversationEntries(messages, "streaming answer"), 3, 40);
   assert.deepEqual(withStreaming.map((entry) => entry.id), ["m6", "streaming"]);
 
   const trimmed = getVisibleConversationEntries(buildConversationEntries([], "line 1\nline 2\nline 3"), 2, 40);
@@ -561,6 +565,7 @@ test("TUI message labels and tool calls use distinct visual roles", () => {
     gutter: theme.role.system.gutter,
     dimColor: true
   });
+  assert.equal(ROLE_GUTTER_SYMBOL, "▏");
 
   const success = formatToolCallLine(
     { name: "bash", args: { command: "npm test" }, resultSummary: "passed" },
@@ -594,7 +599,7 @@ function designTokenSnapshot(theme: TuiTheme) {
 
 test("TUI themes match the committed kaleid design tokens", () => {
   assert.deepEqual(designTokenSnapshot(daylightTheme), {
-    gutterStyle: "bar",
+    gutterStyle: "thin",
     surface: {
       canvas: "#f6f3ea",
       panel: "#fbf8ee",
@@ -651,7 +656,7 @@ test("TUI themes match the committed kaleid design tokens", () => {
   });
 
   assert.deepEqual(designTokenSnapshot(spectrumTheme), {
-    gutterStyle: "block",
+    gutterStyle: "thin",
     surface: {
       canvas: "#0b0b14",
       panel: "#0e0e1a",
@@ -739,14 +744,14 @@ test("TUI themes follow terminal appearance and fall back for low-color terminal
 
   const lowColor = getResolvedTheme("spectrum", "dark", "ansi16");
   assert.equal(lowColor.name, "spectrum");
-  assert.equal(lowColor.gutterStyle, "block");
+  assert.equal(lowColor.gutterStyle, "thin");
   assert.doesNotMatch(lowColor.role.user.fg, /^#/u);
   assert.doesNotMatch(lowColor.tag.docs.bg, /^#/u);
   assert.equal(new Set(Object.values(lowColor.tag).map((tag) => `${tag.bg}/${tag.fg}`)).size, 8);
   assert.equal(new Set(Object.values(lowColor.project).map((project) => `${project.bg}/${project.fg}`)).size, 4);
 
   const daylightLowColor = getResolvedTheme("daylight", "light", "ansi16");
-  assert.equal(daylightLowColor.gutterStyle, "bar");
+  assert.equal(daylightLowColor.gutterStyle, "thin");
   assert.notEqual(daylightLowColor.role.tool.fg, daylightLowColor.role.error.fg);
   assert.notEqual(daylightLowColor.status.warn, daylightLowColor.status.err);
   assert.equal(daylightLowColor.surface.canvas, "white");
@@ -757,6 +762,7 @@ test("TUI header and option selector format model and reasoning state", () => {
   assert.equal(formatHeaderState("gpt-5.5", "high"), "gpt-5.5 · high");
   assert.equal(formatHeaderState("kimi-for-coding", null, "kimi"), "kimi-for-coding [kimi] · -");
   assert.equal(truncateHeaderState("gpt-5.5-pro · medium", 12), "gpt-5.5-p...");
+  assert.match(buildWelcomeIntroText("gpt-5.5", "high"), /^kaleid v0\.0\.12 · gpt-5\.5 · high/u);
   assert.equal(getOptionSelectorHeight(5), 8);
   assert.equal(getResumeSelectorHeight(5), 8);
   assert.equal(getResumeSelectorHeight(5, true), 9);
@@ -969,22 +975,22 @@ test("TUI selector Esc keeps chained model and standalone reasoning only changes
 test("TUI input footer reserves rows for status, slash menu, and OAuth paste mode", () => {
   assert.equal(
     getInputBarHeight({ manualCodePrompt: null, slashCommandCount: 4, slashMenuVisible: false, status: null }),
-    4
+    5
   );
   assert.equal(
     getInputBarHeight({
       input: "line one\nline two",
-      inputWidth: 80,
+      width: 88,
       manualCodePrompt: null,
       slashCommandCount: 0,
       slashMenuVisible: false,
       status: null
     }),
-    5
+    6
   );
   assert.equal(
     getInputBarHeight({ manualCodePrompt: null, slashCommandCount: 4, slashMenuVisible: true, status: null }),
-    8
+    9
   );
   assert.equal(
     getInputBarHeight({
@@ -995,6 +1001,24 @@ test("TUI input footer reserves rows for status, slash menu, and OAuth paste mod
     }),
     7
   );
+  assert.equal(formatStatusModel("gpt-5.5", "high"), "gpt-5.5 · high");
+  const statusLayout = buildStatusLineLayout(
+    {
+      busyStatus: null,
+      conversationName: "conversation with a long visible name",
+      labels: ["review"],
+      model: "gpt-5.5",
+      project: "kaleid",
+      reasoningEffort: "high"
+    },
+    44
+  );
+  assert.equal(statusLayout.fallbackText, null);
+  assert.match(statusLayout.name, /…$/u);
+  assert.equal(statusLayout.project, "kaleid");
+  assert.deepEqual(statusLayout.labels, ["review"]);
+  assert.equal(statusLayout.modelState, "gpt-5.5 · high");
+  assert.ok(statusLayout.width <= 44);
   assert.equal(
     formatTokenStatus({
       usedTokens: 12345,
@@ -1017,8 +1041,8 @@ test("TUI input footer reserves rows for status, slash menu, and OAuth paste mod
     formatSessionDisplayName("kaleid", "修复登录", ["bug", "urgent", "qa"], { maxLabels: 2 }),
     "kaleid - 修复登录 #bug #urgent +1"
   );
-  assert.equal(truncateConversationLabel("kaleid - 修复登录", 12), "kaleid -...");
-  assert.equal(truncateConversationLabel("abcdef", 2), "..");
+  assert.equal(truncateConversationLabel("kaleid - 修复登录", 12), "kaleid - 修…");
+  assert.equal(truncateConversationLabel("abcdef", 2), "a…");
   assert.equal(getMultilineInputRows("one\ntwo", 80), 2);
   assert.equal(getMultilineInputRows("x\nx\nx\nx\nx\nx\nx", 80), 6);
   assert.equal(MULTILINE_INPUT_NEWLINE_HINT, "Enter send · Ctrl+J newline");

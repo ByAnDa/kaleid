@@ -4,6 +4,7 @@ import type { Msg } from "../types.js";
 import { Message, getMessageStyle } from "./Message.js";
 import { formatToolCallLine } from "./ToolCall.js";
 import type { ResolvedTuiTheme } from "../theme/index.js";
+import { textWidth } from "./text-width.js";
 
 export type ConversationEntry =
   | { id: string; kind: "message"; msg: Msg }
@@ -21,19 +22,18 @@ export function buildConversationEntries(messages: Msg[], streaming: string | nu
 export function estimateWrappedLineCount(text: string, width: number): number {
   const wrapWidth = Math.max(1, width);
   return text.split(/\r?\n/u).reduce((total, line) => {
-    const length = Array.from(line).length;
+    const length = textWidth(line);
     return total + Math.max(1, Math.ceil(length / wrapWidth));
   }, 0);
 }
 
 function estimateLabeledTextRows(label: string, text: string, width: number): number {
-  const firstLineWidth = Math.max(1, width - label.length - 1);
-  const continuationWidth = Math.max(1, width - label.length - 1);
+  const contentWidth = Math.max(1, width - 2 - textWidth(label) - 1);
   const [first = "", ...rest] = text.split(/\r?\n/u);
 
   return (
-    estimateWrappedLineCount(first, firstLineWidth) +
-    rest.reduce((total, line) => total + estimateWrappedLineCount(line, continuationWidth), 0)
+    estimateWrappedLineCount(first, contentWidth) +
+    rest.reduce((total, line) => total + estimateWrappedLineCount(line, contentWidth), 0)
   );
 }
 
@@ -43,15 +43,24 @@ export function estimateConversationEntryRows(entry: ConversationEntry, width: n
   }
 
   if (entry.msg.role === "tool" && entry.msg.tool) {
-    return estimateWrappedLineCount(formatToolCallLine(entry.msg.tool, width), width);
+    const contentWidth = Math.max(1, width - 2);
+    return estimateWrappedLineCount(formatToolCallLine(entry.msg.tool, contentWidth), contentWidth);
   }
 
   return estimateLabeledTextRows(getMessageStyle(entry.msg.role).label, entry.msg.text, width);
 }
 
+export function estimateConversationRows(entries: readonly ConversationEntry[], width: number): number {
+  if (entries.length === 0) {
+    return 0;
+  }
+
+  return entries.reduce((total, entry) => total + estimateConversationEntryRows(entry, width), 0) + entries.length - 1;
+}
+
 function trimTextToRows(text: string, label: string, height: number, width: number): string {
   const rows = Math.max(1, height);
-  const wrapWidth = Math.max(1, width - label.length - 1);
+  const wrapWidth = Math.max(1, width - 2 - textWidth(label) - 1);
   const sourceLines = text.split(/\r?\n/u);
   const visibleLines: string[] = [];
   let usedRows = 0;
@@ -115,16 +124,22 @@ export function getVisibleConversationEntries(
       continue;
     }
 
+    const separatorRows = visible.length > 0 ? 1 : 0;
     const rows = estimateConversationEntryRows(entry, width);
-    if (usedRows + rows > height) {
+    if (usedRows + separatorRows + rows > height) {
       if (visible.length === 0) {
         visible.unshift(trimEntryToHeight(entry, height, width));
+      } else {
+        const remainingRows = height - usedRows - separatorRows;
+        if (remainingRows > 0) {
+          visible.unshift(trimEntryToHeight(entry, remainingRows, width));
+        }
       }
       break;
     }
 
     visible.unshift(entry);
-    usedRows += rows;
+    usedRows += separatorRows + rows;
   }
 
   return visible;
@@ -139,30 +154,42 @@ export interface ConversationProps {
 }
 
 export function Conversation({ messages, streaming, height, theme, width }: ConversationProps): React.ReactElement {
-  const entries = getVisibleConversationEntries(buildConversationEntries(messages, streaming), height, width);
-  const usedRows = entries.reduce((total, entry) => total + estimateConversationEntryRows(entry, width), 0);
+  const allEntries = buildConversationEntries(messages, streaming);
+  const entries = getVisibleConversationEntries(allEntries, height, width);
+  const usedRows = estimateConversationRows(entries, width);
   const emptyRows = Math.max(0, height - usedRows);
+  const overflowed = entries.length < allEntries.length;
   const fill = " ".repeat(Math.max(1, width));
+  const emptyFillRows = Array.from({ length: emptyRows }, (_, index) => (
+    <Text key={`empty-${index}`} backgroundColor={theme.surface.canvas}>
+      {fill}
+    </Text>
+  ));
+  const renderedEntries = entries.flatMap((entry, index) => {
+    const element =
+      entry.kind === "streaming" ? (
+        <Message key={entry.id} msg={{ id: entry.id, role: "assistant", text: entry.text }} theme={theme} width={width} />
+      ) : (
+        <Message key={entry.id} msg={entry.msg} theme={theme} width={width} />
+      );
+
+    if (index === entries.length - 1) {
+      return [element];
+    }
+
+    return [
+      element,
+      <Text key={`gap-${entry.id}`} backgroundColor={theme.surface.canvas}>
+        {fill}
+      </Text>
+    ];
+  });
 
   return (
     <Box flexDirection="column" flexGrow={1} height={height} overflow="hidden" width={width}>
-      {Array.from({ length: emptyRows }, (_, index) => (
-        <Text key={`empty-${index}`} backgroundColor={theme.surface.canvas}>
-          {fill}
-        </Text>
-      ))}
-      {entries.map((entry) =>
-        entry.kind === "streaming" ? (
-          <Message
-            key={entry.id}
-            msg={{ id: entry.id, role: "assistant", text: entry.text }}
-            theme={theme}
-            width={width}
-          />
-        ) : (
-          <Message key={entry.id} msg={entry.msg} theme={theme} width={width} />
-        )
-      )}
+      {overflowed ? emptyFillRows : null}
+      {renderedEntries}
+      {overflowed ? null : emptyFillRows}
     </Box>
   );
 }

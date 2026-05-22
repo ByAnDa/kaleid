@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { Box, Text, useInput } from "ink";
 import type { ResolvedTuiTheme } from "../theme/index.js";
+import { charWidth, textWidth } from "./text-width.js";
 
 export const MAX_MULTILINE_INPUT_ROWS = 6;
 export const MULTILINE_INPUT_NEWLINE_HINT = "Enter send · Ctrl+J newline";
@@ -67,17 +68,43 @@ function insertCursor(value: string, cursor: number): string {
   return `${value.slice(0, cursor)}|${value.slice(cursor)}`;
 }
 
-function textLength(value: string): number {
-  return Array.from(value).length;
-}
-
 export function getMultilineInputRows(value: string, width: number): number {
   const wrapWidth = Math.max(1, width);
   const rows = value.split("\n").reduce((total, line) => {
-    const length = Math.max(1, Array.from(line).length);
+    const length = Math.max(1, textWidth(line));
     return total + Math.ceil(length / wrapWidth);
   }, 0);
   return clamp(rows, 1, MAX_MULTILINE_INPUT_ROWS);
+}
+
+function wrapDisplayLine(line: string, width: number): string[] {
+  const wrapWidth = Math.max(1, width);
+  if (line.length === 0) {
+    return [""];
+  }
+
+  const rows: string[] = [];
+  let row = "";
+  let rowWidth = 0;
+
+  for (const char of Array.from(line)) {
+    const nextWidth = rowWidth + charWidth(char);
+    if (row.length > 0 && nextWidth > wrapWidth) {
+      rows.push(row);
+      row = char;
+      rowWidth = charWidth(char);
+    } else {
+      row += char;
+      rowWidth = nextWidth;
+    }
+  }
+
+  rows.push(row);
+  return rows;
+}
+
+function wrapDisplayValue(value: string, width: number): string[] {
+  return value.split("\n").flatMap((line) => wrapDisplayLine(line, width));
 }
 
 export function normalizeInputText(value: string): string {
@@ -119,8 +146,13 @@ export function MultilineInput({
   const [cursor, setCursor] = useState(value.length);
   const displayValue = useMemo(() => maskValue(value, mask), [mask, value]);
   const cursorValue = insertCursor(displayValue, clamp(cursor, 0, displayValue.length));
-  const visibleLines = cursorValue.split("\n").slice(-MAX_MULTILINE_INPUT_ROWS);
-  const hiddenRows = Math.max(0, cursorValue.split("\n").length - visibleLines.length);
+  const valueWidth = Math.max(1, width - prompt.length);
+  const wrappedLines = wrapDisplayValue(cursorValue, valueWidth);
+  const hiddenRows = Math.max(0, wrappedLines.length - MAX_MULTILINE_INPUT_ROWS);
+  const visibleLines = wrappedLines.slice(-MAX_MULTILINE_INPUT_ROWS);
+  if (hiddenRows > 0) {
+    visibleLines[0] = `... ${hiddenRows} earlier row${hiddenRows === 1 ? "" : "s"}`;
+  }
   const promptIndent = " ".repeat(prompt.length);
 
   useEffect(() => {
@@ -188,16 +220,15 @@ export function MultilineInput({
 
   return (
     <Box flexDirection="column" minWidth={0} width={width}>
-      {hiddenRows > 0 ? (
-        <Text backgroundColor={theme.surface.panel} color={theme.text.faint}>
-          {`${promptIndent}... ${hiddenRows} earlier line${hiddenRows === 1 ? "" : "s"}`}
-        </Text>
-      ) : null}
       {visibleLines.map((line, index) => {
         const visiblePrompt = index === 0 ? prompt : promptIndent;
-        const fill = " ".repeat(Math.max(0, width - textLength(visiblePrompt) - textLength(line)));
+        const fill = " ".repeat(Math.max(0, width - textWidth(visiblePrompt) - textWidth(line)));
         return (
-          <Text key={index} backgroundColor={theme.surface.panel} color={theme.text.primary}>
+          <Text
+            key={index}
+            backgroundColor={theme.surface.panel}
+            color={hiddenRows > 0 && index === 0 ? theme.text.faint : theme.text.primary}
+          >
             <Text bold color={promptColor}>
               {visiblePrompt}
             </Text>

@@ -4,6 +4,7 @@ import { ToolCall } from "./ToolCall.js";
 import { RoleGutter } from "./RoleGutter.js";
 import type { Msg } from "../types.js";
 import { DEFAULT_RESOLVED_THEME, type ResolvedTuiTheme, type RoleTokenName } from "../theme/index.js";
+import { textWidth } from "./text-width.js";
 
 export interface MessageStyle {
   label: string;
@@ -40,10 +41,6 @@ export function getMessageStyle(role: Msg["role"], theme: ResolvedTuiTheme = DEF
   return { label: "error", color: token.fg, textColor, gutter: token.gutter };
 }
 
-function textLength(value: string): number {
-  return Array.from(value).length;
-}
-
 export function Message({
   msg,
   theme,
@@ -66,7 +63,7 @@ export function Message({
     <Box flexDirection="column" width={width}>
       {lines.map((line, index) => {
         const label = index === 0 ? `${style.label} ` : indent;
-        const fill = " ".repeat(Math.max(0, lineWidth - 3 - textLength(label) - textLength(line)));
+        const fill = " ".repeat(Math.max(0, lineWidth - 2 - textWidth(label) - textWidth(line)));
         return (
           <Box key={index} flexDirection="row" width={width}>
             <RoleGutter color={style.gutter} theme={theme} />

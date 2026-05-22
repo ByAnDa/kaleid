@@ -2,6 +2,7 @@ import React from "react";
 import { Box, Text } from "ink";
 import { RoleGutter } from "./RoleGutter.js";
 import type { ResolvedTuiTheme } from "../theme/index.js";
+import { textWidth } from "./text-width.js";
 
 export interface ToolCallView {
   name: string;
@@ -46,10 +47,6 @@ export function formatToolCallLine(tool: ToolCallView, width = 80): string {
   return `${parts.invocation} ${parts.status} ${parts.summary}`;
 }
 
-function textLength(value: string): number {
-  return Array.from(value).length;
-}
-
 export function ToolCall({
   theme,
   tool,
@@ -61,9 +58,9 @@ export function ToolCall({
 }): React.ReactElement {
   const parts = formatToolCallParts(tool, width);
   const lineWidth = Math.max(1, width ?? 80);
-  const panelWidth = Math.max(1, lineWidth - 3);
+  const panelWidth = Math.max(1, lineWidth - 2);
   const line = `${parts.invocation} ${parts.status} ${parts.summary}`;
-  const fill = " ".repeat(Math.max(0, panelWidth - textLength(line) - 2));
+  const fill = " ".repeat(Math.max(0, panelWidth - textWidth(line) - 2));
   return (
     <Box flexDirection="row" width={width}>
       <RoleGutter color={theme.role.tool.gutter} theme={theme} />

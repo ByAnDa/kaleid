@@ -40,6 +40,18 @@ export function truncateHeaderState(value: string, maxWidth: number): string {
   return `${value.slice(0, maxWidth - 3)}...`;
 }
 
+export function buildWelcomeIntroText(
+  model: string,
+  reasoningEffort: ReasoningEffort | null,
+  provider?: ProviderId
+): string {
+  return [
+    `kaleid ${VERSION_LABEL} · ${formatHeaderState(model, reasoningEffort, provider)}`,
+    "a kaleidoscopic terminal agent · multi-model · project & label scoped",
+    "/help · /resume · /label · ^C interrupt · ^D exit"
+  ].join("\n");
+}
+
 function textLength(value: string): number {
   return Array.from(value).length;
 }

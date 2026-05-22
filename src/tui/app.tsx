@@ -44,7 +44,7 @@ import {
   type SlashCommandDefinition
 } from "./commands.js";
 import { Conversation } from "./components/Conversation.js";
-import { Header, HEADER_HEIGHT } from "./components/Header.js";
+import { buildWelcomeIntroText } from "./components/Header.js";
 import { InputBar, getInputBarHeight } from "./components/InputBar.js";
 import {
   OptionSelector,
@@ -603,15 +603,31 @@ export function App({
   const comboboxHeight = comboboxVisible ? getOptionComboboxHeight(comboboxOptions.length, comboboxInput) : 0;
   const inputBarHeight = getInputBarHeight({
     input,
-    inputWidth: Math.max(1, terminal.columns - 12),
+    inputPrompt: renameInputActive ? RENAME_INPUT_PROMPT : undefined,
     manualCodePrompt,
     slashCommandCount: slashCandidates.length,
     slashMenuVisible,
-    status
+    status,
+    width: terminal.columns
   });
   const conversationHeight = Math.max(
     1,
-    terminal.rows - HEADER_HEIGHT - selectorHeight - comboboxHeight - inputBarHeight
+    terminal.rows - selectorHeight - comboboxHeight - inputBarHeight
+  );
+  const conversationMessages = useMemo<Msg[]>(
+    () => [
+      {
+        id: "__kaleid_intro__",
+        role: "system",
+        text: buildWelcomeIntroText(
+          currentModel,
+          providerSupportsReasoningEffort(currentProvider) ? reasoningEffort : null,
+          currentProvider
+        )
+      },
+      ...history
+    ],
+    [currentModel, currentProvider, history, reasoningEffort]
   );
 
   const commit = useCallback((msg: Msg) => {
@@ -1635,19 +1651,9 @@ export function App({
 
   return (
     <Box flexDirection="column" height={terminal.rows} width={terminal.columns}>
-      <Header
-        labels={currentSession.metadata.labels}
-        model={currentModel}
-        name={currentSession.metadata.name}
-        project={currentSession.metadata.project}
-        provider={currentProvider}
-        reasoningEffort={providerSupportsReasoningEffort(currentProvider) ? reasoningEffort : null}
-        theme={theme}
-        width={terminal.columns}
-      />
       <Conversation
         height={conversationHeight}
-        messages={history}
+        messages={conversationMessages}
         streaming={streaming}
         theme={theme}
         width={terminal.columns}
@@ -1712,7 +1718,12 @@ export function App({
         status={status}
         theme={theme}
         tokenState={tokenState}
-        conversationLabel={conversationLabel}
+        conversationName={currentSession.metadata.name}
+        labels={currentSession.metadata.labels}
+        model={currentModel}
+        project={currentSession.metadata.project}
+        provider={currentProvider}
+        reasoningEffort={providerSupportsReasoningEffort(currentProvider) ? reasoningEffort : null}
         width={terminal.columns}
       />
     </Box>

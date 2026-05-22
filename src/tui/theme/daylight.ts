@@ -2,7 +2,7 @@ import type { TuiTheme } from "./tokens.js";
 
 export const daylightTheme: TuiTheme = {
   name: "daylight",
-  gutterStyle: "bar",
+  gutterStyle: "thin",
   surface: {
     canvas: "#f6f3ea",
     panel: "#fbf8ee",

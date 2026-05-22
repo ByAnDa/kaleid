@@ -5,7 +5,7 @@ export type TerminalColorLevel = "truecolor" | "ansi256" | "ansi16";
 
 export type RoleTokenName = "system" | "user" | "assistant" | "tool" | "error";
 export type StatusTokenName = "ok" | "warn" | "err" | "info";
-export type GutterStyle = "bar" | "block";
+export type GutterStyle = "bar" | "block" | "thin";
 export type TagTokenName =
   | "review"
   | "wip"

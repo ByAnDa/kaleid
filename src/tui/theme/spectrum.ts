@@ -2,7 +2,7 @@ import type { TuiTheme } from "./tokens.js";
 
 export const spectrumTheme: TuiTheme = {
   name: "spectrum",
-  gutterStyle: "block",
+  gutterStyle: "thin",
   surface: {
     canvas: "#0b0b14",
     panel: "#0e0e1a",
