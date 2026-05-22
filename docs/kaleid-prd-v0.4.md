@@ -165,7 +165,10 @@ Reviewer: ByAnDa
 - `/rename <名称>` 或 `/rename <项目>/<名称>`；会话两级 **项目 - 对话名称**（默认无项目）存 metadata；输入框右上角常显 `项目 - 名称`；resume 列表用 项目-名称 显示。
 
 ### spec-017 — `/project` + `/chatlabel` 多标签（待审核）
-- `/project <名称>` 改/清当前对话 project；`/chatlabel <标签>` 加多标签（去重、可移除）；右上角合并常显 `项目 - 名称 + #标签`。详见 `kaleid spec-017 project-and-labels.md`。
+- `/project <名称>` 改/清当前对话 project；`/chatlabel <标签>` 加多标签（去重、可移除）；右上角合并常显 `项目 - 名称 + #标签`。`/project` //chatlabel 为 combobox（选现有 distinct 或直接输入新的）。详见 `kaleid spec-017 project-and-labels.md`。
+
+### spec-018 — resume project/label 筛选（待审核）
+- resume 选择器顶部加筛选栏 project（默认全部）+ label（默认全部）；选中进入对应列表选一个后返回、只显示该 project/label 的对话；两维 AND；选"全部"清除。详见 `kaleid spec-018 resume-filter.md`。
 
 ### spec-014 — 单对话记忆（0.0.8）
 - **token 常显输入框下方**：`ctx used / window · pct%`（当前上下文 / 最大窗口 / 百分比），接近上限变色。
