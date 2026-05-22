@@ -21,7 +21,8 @@ Reviewer: ByAnDa
 > Implement: the designs in this project
 > ```
 > 该 URL 返回 gzip bundle（`curl -sL <url> -o b.gz && tar -xzf b.gz`）。实施前**读 `kaleid/README.md` + `kaleid/chats/chat1.md`（意图）+ `kaleid/project/tui-screens.jsx`（ChatScreen/ResumeScreen）+ `kaleid/project/kaleid-tokens.js`（token 单一来源）**，按设计视觉重做我们现有全屏 TUI（非复制 HTML 结构，是还原视觉）。
-> ⚠️ **不要把设计 bundle commit 进 repo**（kaleid 是公开仓库，bundle 含 ByAnDa 的原始上传图，属隐私）；只在本地 fetch 参考。
+> ⚠️ **bundle 里的 `kaleid/project/uploads/`（微信图片…）是 ByAnDa 给 Claude Design 的原始输入图，实施无需参考、直接忽略**。只看设计 **输出**：README / chats / `tui-screens.jsx` / `kaleid-tokens.js` / `screenshots/`。
+> ⚠️ **不要把设计 bundle commit 进公开 repo**（含上述上传图）；只本地 fetch 参考。
 
 ## 已拍板的实现约束（ByAnDa msg=c017bec8）
 1. **默认主题跟随用户终端**：检测终端深/浅 → 深=Spectrum、浅=Daylight（而非硬上 Daylight）。
