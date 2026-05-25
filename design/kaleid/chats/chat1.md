@@ -212,3 +212,102 @@ _[tool: fork_verifier_agent]_
 
 Tweaks 面板里加了 "Open token catalog →" 按钮，方便从 TUI 设计稿跳过去。
 
+## User
+
+我对目前这版设计不太满意。你在网上搜索一下相关的 TUI 都需要哪些状态等等，给我重新设计一版。要求下方文本框清晰。然后我的 resume 功能有一个 model 跟 project 筛选的地方也要记得做好。
+
+## Assistant
+
+_[tool: update_todos]_
+
+_[tool: str_replace_edit]_
+
+_[tool: str_replace_edit]_
+
+_[tool: web_search]_
+
+_[tool: web_search]_
+
+了解。我看了一圈现在的 TUI agent（Claude Code、Codex、Crush、Aider、Opencode、DeepSeek TUI、ralph-tui 等）的真实状态和交互模式，整理出**真正应该被设计的 TUI 状态/组件**，然后基于这些重新做：
+
+**研究发现的核心 TUI 状态**（v1 都没覆盖）：
+- 状态机：idle / typing / submitting / **streaming** / **thinking** / tool-running / **awaiting-approval** / done / **error** / interrupted
+- streaming reasoning blocks display the model's internal thinking tokens as they are generated — DeepSeek TUI、Claude Code 都有
+- three approval modes let you control exactly how much autonomy — Codex 的 approval gate（一个独立的 UI 状态）
+- Plan Mode (left, read-only) or Normal Mode (right, full access). Plan Mode spawns a Planner subagent — Plan mode 是独立 UI 模式
+- Subagent activity is currently surfaced in the Codex app and CLI — 并行 subagent 也要展示
+- Resume 应该有 agent and directory filters... date filters have their own mini-language —— model / project / label / 时间多维筛选 + 全文搜索
+- Session persistence: Conversations are stored locally. You can resume previous sessions with codex resume --last
+
+_[tool: str_replace_edit]_
+
+_[tool: write_file]_
+
+_[tool: write_file]_
+
+_[tool: show_html]_
+
+_[tool: get_webview_logs]_
+
+_[tool: show_html]_
+
+_[tool: get_webview_logs]_
+
+_[tool: save_screenshot]_
+
+_[tool: view_image]_
+
+_[tool: sleep]_
+
+_[tool: save_screenshot]_
+
+_[tool: view_image]_
+
+_[tool: save_screenshot]_
+
+_[tool: view_image]_
+
+Looking solid. Let me check the chat scenarios in the canvas:
+
+_[tool: eval_js]_
+
+_[tool: save_screenshot]_
+
+_[tool: view_image]_
+
+_[tool: save_screenshot]_
+
+_[tool: eval_js]_
+
+_[tool: view_image]_
+
+_[tool: done]_
+
+_[tool: update_todos]_
+
+_[tool: fork_verifier_agent]_
+
+重新做完了 v2。
+
+**做了什么调整**
+
+调研了 DeepSeek TUI、Claude Code、Codex、Crush 等真实 TUI agent，提炼出真正应该被设计的状态/组件：
+
+1. **状态机 pill**（顶部 header 右侧）— idle / **typing** / **thinking** / **streaming** / **running** / **awaiting approval** / ok / err，每种自带语义色 + 脉冲点
+2. **强醒输入框**（关键改进）：
+   - 整体一个有 border + accent shadow 的卡片，focused 时高亮
+   - 顶部 strip：mode pill（NORMAL / PLAN / AUTO / READ-ONLY）+ 附件 chips + model picker
+   - 中间多行文本区，左侧 prompt sigil + 行号
+   - 底部 hint bar：⌃↵ send · ⇧↵ newline · / commands · @ files · ⌃M model · ⌃P plan
+3. **Resume 屏**重做：
+   - 全文搜索条
+   - **model / project / date 三个独立筛选下拉**
+   - label 多选 chips
+   - 表格列表 + 右侧 360px **session preview pane**（最后一条回复 + meta 网格 + resume/fork/delete 按钮）
+4. **真正的 TUI 组件**：thinking block（折叠/展开的内心独白）、tool card（带 status pill + 用时）、**approval card**（y/a/e/n 四键决策）、**plan card**（checklist 含勾选状态）、slash command palette
+
+**5 个 artboard 演示 5 种状态**（每个 theme 一组，共 10 个）：
+- Resume · Streaming · Plan mode · Awaiting approval · Typing + slash palette
+
+Tweaks 面板里加了「Show scenarios」5 个开关，可以隐藏不感兴趣的状态来聚焦审阅。`tokens.html` 同步新增 `state` 和 `mode` palette。
+

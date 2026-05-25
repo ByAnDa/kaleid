@@ -132,6 +132,9 @@ Reviewer: ByAnDa
 
 ## 八、V1 后演进（spec-008~014，并入本 PRD）
 
+### spec-025 — v2 设计 Phase A（待审核）
+- v2 大改版（调研 Claude Code/Codex/Crush 重做）的 **Phase A = 纯视觉+真实数据驱动**部分（依赖新 backend 能力的=Phase B 另立项）。5 项：①状态 pill（映射现有 idle/thinking/streaming/running/ok/err，state token）；②输入框强化（border 卡片+prompt sigil+行号+hint bar，hint 只列已实现键不含 @files/plan）；③resume 筛选栏对齐设计 **+ 修塌缩 bug**（筛选行 height=1 overflow=hidden 在超宽时整行塌缩消失→改按宽度自适应截断）；④tool call 折叠卡片（默认折叠 ▸ name ✓ 摘要，键盘展开 ▾）；⑤resume 预览侧栏（只读：最后回复+meta，响应式，fork/delete/cost/branch=Phase B 不做）。全键盘。设计 bundle 已 commit 到 repo `design/kaleid/`（v2，含 state/mode token + v2 screenshots，排除私有 uploads）。详见 `kaleid spec-025 v2-phase-a.md`。
+
 ### spec-024 — TUI 第三轮修复（待审核）
 - 3 项：①**logo banner 双色还原**（spec-023 把 logo 作 system 纯文本→单色暗，改为复用 LogoLine 的 ◆烧橙/◇muted 彩色 banner 作对话首条特殊条目，仍上滚消失）；②**输入框右边距/对齐/背景填满**（顶部状态行与底部 footer 与右边框留统一小空隙且右对齐对齐；输入框 canvas 底色填满到右内沿、无纯黑残留）；③**修复 resume 的 project/label 筛选回归**（用户反馈"没了"；代码渲染+导航+应用均在，疑视觉/布局回归致筛选栏不可见/不可聚焦，真实终端复现修复，恢复 spec-018 行为）。详见 `kaleid spec-024 banner-input-resume-fixes.md`。
 

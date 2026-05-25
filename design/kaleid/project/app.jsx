@@ -1,16 +1,30 @@
-// kaleid TUI — design canvas app
-// Renders 2 themes (light = Daylight, dark = Spectrum) × 2 screens
-// (Resume + Main chat). Both themes are derived from a single design-token
-// source: kaleid-tokens.js → themeFromTokens(modeKey).
+// kaleid TUI v2 — design canvas
+// Layout:
+//   Daylight section: Resume, Streaming, Plan, Approval, Typing
+//   Spectrum section: Resume, Streaming, Plan, Approval, Typing
+//
+// Each ChatScreen scenario corresponds to a distinct TUI state.
 
 const KALEID_TWEAK_DEFAULTS = /*EDITMODE-BEGIN*/{
-  "fontSize": 14,
+  "fontSize": 13,
   "lineHeight": 1.55,
-  "asciiBoxOverride": "auto"
+  "showResume": true,
+  "showStreaming": true,
+  "showPlan": true,
+  "showApproval": true,
+  "showTyping": true
 }/*EDITMODE-END*/;
 
-const ARTBOARD_W = 1280;
-const ARTBOARD_H = 760;
+const W = 1280;
+const H = 820;
+
+const SCENARIOS = [
+  { key: 'resume',    label: 'Resume',        comp: 'ResumeScreen', tweak: 'showResume' },
+  { key: 'streaming', label: 'Streaming reply · tool calls', scenario: 'streaming', tweak: 'showStreaming' },
+  { key: 'plan',      label: 'Plan mode',     scenario: 'plan',     tweak: 'showPlan' },
+  { key: 'approval',  label: 'Awaiting approval', scenario: 'approval', tweak: 'showApproval' },
+  { key: 'typing',    label: 'Typing · slash palette', scenario: 'typing', tweak: 'showTyping' },
+];
 
 function App() {
   const [tweaks, setTweak] = useTweaks(KALEID_TWEAK_DEFAULTS);
@@ -18,15 +32,16 @@ function App() {
   const lightTheme = React.useMemo(() => window.themeFromTokens('light'), []);
   const darkTheme  = React.useMemo(() => window.themeFromTokens('dark'),  []);
 
-  const resolveBox = (theme) => {
-    if (tweaks.asciiBoxOverride === 'on')  return true;
-    if (tweaks.asciiBoxOverride === 'off') return false;
-    return theme.boxDrawing === 'full';
+  const renderArtboard = (theme, sc) => {
+    if (sc.comp === 'ResumeScreen') {
+      return <ResumeScreen theme={theme} fontSize={tweaks.fontSize} lineHeight={tweaks.lineHeight} />;
+    }
+    return <ChatScreen theme={theme} fontSize={tweaks.fontSize} lineHeight={tweaks.lineHeight} scenario={sc.scenario} />;
   };
 
   const variants = [
-    { key: 'daylight', theme: lightTheme, title: 'Daylight', subtitle: 'light mode default · 浅色亮屏，温润纸质感' },
-    { key: 'spectrum', theme: darkTheme,  title: 'Spectrum', subtitle: 'dark mode default · 深色，多彩角色色条 gutter' },
+    { key: 'daylight', theme: lightTheme, title: 'Daylight · light mode', subtitle: 'warm parchment, ink-on-paper roles, burnt-orange accent' },
+    { key: 'spectrum', theme: darkTheme,  title: 'Spectrum · dark mode', subtitle: 'deep ink, multi-hue role gutters, hot-pink accent' },
   ];
 
   return (
@@ -34,34 +49,34 @@ function App() {
       <DesignCanvas>
         {variants.map(({ key, theme, title, subtitle }) => (
           <DCSection id={key} key={key} title={title} subtitle={subtitle}>
-            <DCArtboard id={key + '-resume'} label="Resume" width={ARTBOARD_W} height={ARTBOARD_H}>
-              <ResumeScreen theme={theme} fontSize={tweaks.fontSize} lineHeight={tweaks.lineHeight} showBox={resolveBox(theme)} />
-            </DCArtboard>
-            <DCArtboard id={key + '-chat'} label="Main chat" width={ARTBOARD_W} height={ARTBOARD_H}>
-              <ChatScreen theme={theme} fontSize={tweaks.fontSize} lineHeight={tweaks.lineHeight} showBox={resolveBox(theme)} />
-            </DCArtboard>
+            {SCENARIOS.filter(sc => tweaks[sc.tweak]).map(sc => (
+              <DCArtboard
+                id={key + '-' + sc.key}
+                key={sc.key}
+                label={sc.label}
+                width={W}
+                height={H}
+              >
+                {renderArtboard(theme, sc)}
+              </DCArtboard>
+            ))}
           </DCSection>
         ))}
       </DesignCanvas>
 
       <TweaksPanel title="Tweaks">
         <TweakSection label="Typography">
-          <TweakSlider label="Font size"   value={tweaks.fontSize}   onChange={(v) => setTweak('fontSize', v)}   min={11} max={18}  step={1}    unit="px" />
-          <TweakSlider label="Line height" value={tweaks.lineHeight} onChange={(v) => setTweak('lineHeight', v)} min={1.2} max={1.9} step={0.05} />
+          <TweakSlider label="Font size"   value={tweaks.fontSize}   onChange={v => setTweak('fontSize', v)}   min={11} max={18} step={1} unit="px" />
+          <TweakSlider label="Line height" value={tweaks.lineHeight} onChange={v => setTweak('lineHeight', v)} min={1.2} max={1.9} step={0.05} />
         </TweakSection>
-        <TweakSection label="Frame chrome">
-          <TweakRadio
-            label="ASCII box drawing"
-            value={tweaks.asciiBoxOverride}
-            onChange={(v) => setTweak('asciiBoxOverride', v)}
-            options={[
-              { value: 'auto', label: 'theme default' },
-              { value: 'on',   label: 'always on' },
-              { value: 'off',  label: 'never' },
-            ]}
-          />
+        <TweakSection label="Show scenarios">
+          <TweakToggle label="Resume"          value={tweaks.showResume}    onChange={v => setTweak('showResume', v)} />
+          <TweakToggle label="Streaming"       value={tweaks.showStreaming} onChange={v => setTweak('showStreaming', v)} />
+          <TweakToggle label="Plan mode"       value={tweaks.showPlan}      onChange={v => setTweak('showPlan', v)} />
+          <TweakToggle label="Approval gate"   value={tweaks.showApproval}  onChange={v => setTweak('showApproval', v)} />
+          <TweakToggle label="Typing · slash"  value={tweaks.showTyping}    onChange={v => setTweak('showTyping', v)} />
         </TweakSection>
-        <TweakSection label="Design tokens">
+        <TweakSection label="Design system">
           <TweakButton label="Open token catalog →" onClick={() => window.open('tokens.html', '_blank')} />
         </TweakSection>
       </TweaksPanel>

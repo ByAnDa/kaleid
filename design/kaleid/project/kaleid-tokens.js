@@ -94,6 +94,26 @@ const KALEID_TOKENS = {
           personal:  { bg: '#cee8d5', fg: '#1f5e36' },
         },
         selection: { bg: '#e8d2c0', fg: '#28241b' },
+
+        // semantic state colors (per-state pills/borders)
+        state: {
+          idle:        { fg: '#857e6d', bg: '#ece5d2', dot: '#a8a190' },
+          typing:      { fg: '#0c4670', bg: '#d5e6f3', dot: '#0e547d' },
+          thinking:    { fg: '#4c2e95', bg: '#e1dbef', dot: '#7a5af5' },
+          streaming:   { fg: '#7b2c10', bg: '#f0d8c4', dot: '#b8431a' },
+          running:     { fg: '#7a5b0d', bg: '#f1e1bb', dot: '#a17612' },
+          approving:   { fg: '#86234a', bg: '#efd9e6', dot: '#c1408a' },
+          ok:          { fg: '#1f5e36', bg: '#cee8d5', dot: '#1f5e36' },
+          err:         { fg: '#8e2222', bg: '#f0d6d6', dot: '#8e2222' },
+        },
+
+        // input composer modes
+        mode: {
+          normal: { fg: '#28241b', bg: '#ece5d2', dot: '#28241b' },
+          plan:   { fg: '#4c2e95', bg: '#e1dbef', dot: '#7a5af5' },
+          auto:   { fg: '#b8431a', bg: '#f0d8c4', dot: '#b8431a' },
+          readonly:{ fg: '#1f5e36', bg: '#cee8d5', dot: '#1f5e36' },
+        },
       },
     },
 
@@ -156,6 +176,24 @@ const KALEID_TOKENS = {
           personal:  { bg: '#0c3a26', fg: '#86efac' },
         },
         selection: { bg: '#2a1d44', fg: '#e6e3f0' },
+
+        state: {
+          idle:      { fg: '#8a8598', bg: '#1a1a28', dot: '#706c80' },
+          typing:    { fg: '#67e8f9', bg: '#0b2a3a', dot: '#06b6d4' },
+          thinking:  { fg: '#d8b4fe', bg: '#2a1448', dot: '#a855f7' },
+          streaming: { fg: '#fbcfe8', bg: '#3a1130', dot: '#ec4899' },
+          running:   { fg: '#fde047', bg: '#3a2a08', dot: '#eab308' },
+          approving: { fg: '#fdba74', bg: '#3a2008', dot: '#f97316' },
+          ok:        { fg: '#6ee7b7', bg: '#0a2a20', dot: '#10b981' },
+          err:       { fg: '#fca5a5', bg: '#3a0c0c', dot: '#ef4444' },
+        },
+
+        mode: {
+          normal:   { fg: '#e6e3f0', bg: '#1c1c2e', dot: '#a8a3c0' },
+          plan:     { fg: '#d8b4fe', bg: '#2a1448', dot: '#a855f7' },
+          auto:     { fg: '#fbcfe8', bg: '#3a1130', dot: '#ec4899' },
+          readonly: { fg: '#6ee7b7', bg: '#0a2a20', dot: '#10b981' },
+        },
       },
     },
 
@@ -197,6 +235,8 @@ function themeFromTokens(modeKey) {
     projects: c.project,
     selectionBg: c.selection.bg,
     selectionFg: c.selection.fg,
+    state: c.state,
+    modePalette: c.mode,
     gutterStyle: m.gutterStyle,
     boxDrawing:  'minimal',
     // raw token bag (for any future component that wants it)
