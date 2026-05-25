@@ -5,6 +5,8 @@ export type TerminalColorLevel = "truecolor" | "ansi256" | "ansi16";
 
 export type RoleTokenName = "system" | "user" | "assistant" | "tool" | "error";
 export type StatusTokenName = "ok" | "warn" | "err" | "info";
+export type StateTokenName = "idle" | "typing" | "thinking" | "streaming" | "running" | "approving" | "ok" | "err";
+export type ModeTokenName = "normal" | "plan" | "auto" | "readonly";
 export type GutterStyle = "bar" | "block" | "thin";
 export type TagTokenName =
   | "review"
@@ -25,6 +27,10 @@ export interface RoleColorTokens {
 export interface BadgeColorTokens {
   bg: string;
   fg: string;
+}
+
+export interface StateColorTokens extends BadgeColorTokens {
+  dot: string;
 }
 
 export interface ThemeColorTokens {
@@ -54,6 +60,8 @@ export interface ThemeColorTokens {
   };
   role: Record<RoleTokenName, RoleColorTokens>;
   status: Record<StatusTokenName, string>;
+  state: Record<StateTokenName, StateColorTokens>;
+  modePalette: Record<ModeTokenName, StateColorTokens>;
   tag: Record<TagTokenName, BadgeColorTokens>;
   project: Record<ProjectTokenName, BadgeColorTokens>;
   selection: BadgeColorTokens;

@@ -6,9 +6,10 @@ import { BusyLine, StatusLine } from "./StatusLine.js";
 import type { TokenState } from "../../loop/session.js";
 import type { ProviderId, ReasoningEffort } from "../../provider/models.js";
 import type { ResolvedTuiTheme } from "../theme/index.js";
-import { MULTILINE_INPUT_NEWLINE_HINT, MultilineInput, getMultilineInputRows } from "./MultilineInput.js";
+import { INPUT_COMPOSER_HINT, MultilineInput, getMultilineInputRows } from "./MultilineInput.js";
+import { StateChip, getStateChipWidth, type AgentState } from "./StateChip.js";
 import { STATUS_LINE_RIGHT_MARGIN } from "./StatusLine.js";
-import { textWidth } from "./text-width.js";
+import { textWidth, truncateEnd } from "./text-width.js";
 
 export interface InputBarLayoutState {
   input?: string;
@@ -33,7 +34,7 @@ export function getInputValueWidth(width: number, prompt: string): number {
 export function getInputFooterGapWidth(width: number, tokenStatus: string): number {
   return Math.max(
     0,
-    width - 1 - STATUS_LINE_RIGHT_MARGIN - textWidth(tokenStatus) - textWidth(MULTILINE_INPUT_NEWLINE_HINT)
+    width - 1 - STATUS_LINE_RIGHT_MARGIN - textWidth(tokenStatus)
   );
 }
 
@@ -42,19 +43,27 @@ function getPrompt(inputPrompt: string | undefined, manualCodePrompt: string | n
 }
 
 function getInputPromptText(prompt: string): string {
-  return ` ${prompt}`;
+  return prompt;
+}
+
+export function formatInputHintBar(input: string, width: number): string {
+  const lines = Math.max(1, input.split("\n").length);
+  const meta = `${Array.from(input).length} chars · ${lines} ${lines === 1 ? "line" : "lines"}`;
+  const gap = Math.max(1, width - textWidth(INPUT_COMPOSER_HINT) - textWidth(meta));
+  const full = `${INPUT_COMPOSER_HINT}${" ".repeat(gap)}${meta}`;
+  return truncateEnd(full, Math.max(1, width));
 }
 
 export function getInputBarHeight(state: InputBarLayoutState): number {
   const conversationGapRows = 1;
   const statusRows = 1;
   const busyRows = state.status ? 1 : 0;
-  const manualPromptRows = state.manualCodePrompt ? 1 : 0;
+  const manualPromptRows = state.manualCodePrompt || state.inputPrompt ? 1 : 0;
   const slashMenuRows = state.slashMenuVisible ? Math.max(1, state.slashCommandCount) : 0;
   const prompt = getPrompt(state.inputPrompt, state.manualCodePrompt);
   const inputWidth = state.inputWidth ?? (state.width ? getInputValueWidth(state.width, prompt) : 80);
   const inputRows = getMultilineInputRows(state.input ?? "", inputWidth, { mask: state.inputMask });
-  return conversationGapRows + busyRows + statusRows + inputRows + 3 + manualPromptRows + slashMenuRows;
+  return conversationGapRows + busyRows + statusRows + inputRows + 4 + manualPromptRows + slashMenuRows;
 }
 
 export interface InputBarProps extends InputBarLayoutState {
@@ -73,6 +82,7 @@ export interface InputBarProps extends InputBarLayoutState {
   reasoningEffort: ReasoningEffort | null;
   selectedSlashIndex: number;
   slashCandidates: SlashCommandDefinition[];
+  state: AgentState;
   theme: ResolvedTuiTheme;
   tokenState: TokenState;
   width: number;
@@ -110,6 +120,7 @@ export function InputBar({
   reasoningEffort,
   selectedSlashIndex,
   slashCandidates,
+  state,
   theme,
   tokenState,
   slashMenuVisible,
@@ -117,7 +128,6 @@ export function InputBar({
   width
 }: InputBarProps): React.ReactElement {
   const prompt = getPrompt(inputPrompt, manualCodePrompt);
-  const inputPromptText = getInputPromptText(prompt);
   const borderColor = inputPrompt
     ? theme.accent.default
     : manualCodePrompt
@@ -131,27 +141,35 @@ export function InputBar({
   const tokenStatus = formatTokenStatus(tokenState);
   const footerGap = " ".repeat(getInputFooterGapWidth(width, tokenStatus));
   const disabledText = disabledLabel ?? status ?? "working...";
-  const disabledFill = " ".repeat(Math.max(0, inputWidth - textWidth(inputPromptText) - textWidth(disabledText)));
+  const disabledFill = " ".repeat(Math.max(0, inputWidth - textWidth("› ") - textWidth(disabledText)));
+  const chipWidth = Math.min(getStateChipWidth(state), Math.max(1, Math.floor(width / 2)));
+  const statusWidth = Math.max(1, width - chipWidth - 1);
+  const hintWidth = Math.max(1, inputWidth - 2);
+  const hint = formatInputHintBar(input, hintWidth);
 
   return (
     <Box flexDirection="column" flexShrink={0} width={width}>
       <Text backgroundColor={theme.surface.canvas}>{" ".repeat(Math.max(1, width))}</Text>
       {status ? <BusyLine status={status} theme={theme} width={width} /> : null}
-      <StatusLine
-        busyStatus={null}
-        conversationName={conversationName}
-        labels={labels}
-        model={model}
-        project={project}
-        provider={provider}
-        reasoningEffort={reasoningEffort}
-        theme={theme}
-        width={width}
-      />
-      {manualCodePrompt ? (
+      <Box flexDirection="row" width={width}>
+        <StateChip state={state} theme={theme} width={chipWidth} />
+        <Text backgroundColor={theme.surface.canvas}> </Text>
+        <StatusLine
+          busyStatus={null}
+          conversationName={conversationName}
+          labels={labels}
+          model={model}
+          project={project}
+          provider={provider}
+          reasoningEffort={reasoningEffort}
+          theme={theme}
+          width={statusWidth}
+        />
+      </Box>
+      {manualCodePrompt || inputPrompt ? (
         <Box paddingX={1}>
-          <Text backgroundColor={theme.surface.canvas} color={theme.status.warn}>
-            {manualCodePrompt}
+          <Text backgroundColor={theme.surface.canvas} color={manualCodePrompt ? theme.status.warn : theme.accent.default}>
+            {manualCodePrompt ?? inputPrompt}
           </Text>
         </Box>
       ) : null}
@@ -161,15 +179,15 @@ export function InputBar({
       <Box
         borderStyle="single"
         borderColor={borderColor}
-        height={inputRows + 2}
+        height={inputRows + 3}
         width={width}
       >
-        <Box flexDirection="row" width="100%">
+        <Box flexDirection="column" width="100%">
           <Box flexGrow={1} minWidth={0} width={inputWidth}>
             {disabled ? (
               <Text backgroundColor={theme.surface.canvas} color={theme.text.muted}>
                 <Text bold color={promptColor}>
-                  {inputPromptText}
+                  {"› "}
                 </Text>
                 {disabledText}
                 {disabledFill}
@@ -180,7 +198,7 @@ export function InputBar({
                 mask={inputMask}
                 onChange={onChange}
                 onSubmit={onSubmit}
-                prompt={inputPromptText}
+                promptSigil="›"
                 promptColor={promptColor}
                 theme={theme}
                 value={input}
@@ -188,6 +206,11 @@ export function InputBar({
               />
             )}
           </Box>
+          <Text backgroundColor={theme.surface.panel} color={theme.text.faint}>
+            {" "}
+            {hint}
+            {" "}
+          </Text>
         </Box>
       </Box>
       <Box paddingX={1} width={width}>
@@ -195,9 +218,6 @@ export function InputBar({
           {tokenStatus}
         </Text>
         <Text backgroundColor={theme.surface.canvas}>{footerGap}</Text>
-        <Text backgroundColor={theme.surface.canvas} color={theme.text.faint}>
-          {MULTILINE_INPUT_NEWLINE_HINT}
-        </Text>
       </Box>
     </Box>
   );

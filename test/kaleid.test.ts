@@ -66,6 +66,7 @@ import {
   buildResumeLabelFilterOptions,
   buildResumeProjectFilterOptions,
   buildResumeSelectorOptions,
+  deriveAgentState,
   applySelectorTransition,
   cancelSelectorTransition,
   CLEAR_PROJECT_OPTION_ID,
@@ -86,13 +87,14 @@ import {
   getVisibleConversationEntries
 } from "../src/tui/components/Conversation.js";
 import { buildWelcomeIntroText, formatHeaderState, truncateHeaderState } from "../src/tui/components/Header.js";
-import { formatTokenStatus, getInputBarHeight, getInputFooterGapWidth, truncateConversationLabel } from "../src/tui/components/InputBar.js";
+import { formatInputHintBar, formatTokenStatus, getInputBarHeight, getInputFooterGapWidth, truncateConversationLabel } from "../src/tui/components/InputBar.js";
 import { formatMessageRows, getMessageStyle } from "../src/tui/components/Message.js";
 import { ROLE_GUTTER_SYMBOL } from "../src/tui/components/RoleGutter.js";
 import { STATUS_LINE_RIGHT_MARGIN, buildStatusLineLayout, formatStatusModel } from "../src/tui/components/StatusLine.js";
 import { getProjectTokenName, getTagTokenName } from "../src/tui/components/Badges.js";
 import {
   MULTILINE_INPUT_NEWLINE_HINT,
+  INPUT_COMPOSER_HINT,
   getMultilineInputRows,
   normalizeInputText,
   shouldInsertInputNewline
@@ -103,8 +105,11 @@ import {
   getVisibleResumeFilterOptions,
   formatResumeActivity,
   formatResumeFilterChipLabel,
+  formatResumePreviewText,
+  getResumeFilterGroupWidths,
   getResumeSelectorHeight
 } from "../src/tui/components/ResumeSelector.js";
+import { formatStateChipText } from "../src/tui/components/StateChip.js";
 import {
   WELCOME_BANNER_ROWS,
   buildWelcomeBannerRows,
@@ -604,8 +609,9 @@ test("TUI message labels and tool calls use distinct visual roles", () => {
     { name: "bash", args: { command: "npm test" }, resultSummary: "passed" },
     80
   );
-  assert.match(success, /^⏺ bash\(/u);
+  assert.match(success, /^▸ bash\(/u);
   assert.match(success, /✔ passed/u);
+  assert.match(success, /⏎ to expand/u);
 
   const failure = formatToolCallLine(
     { name: "read", args: { path: "missing.txt" }, resultSummary: "not found", isError: true },
@@ -634,6 +640,8 @@ function designTokenSnapshot(theme: TuiTheme) {
     accent: theme.accent,
     role: { system, user, assistant, tool },
     status: theme.status,
+    state: theme.state,
+    modePalette: theme.modePalette,
     tag: theme.tag,
     project: theme.project,
     selection: theme.selection
@@ -678,6 +686,22 @@ test("TUI themes match the committed kaleid design tokens", () => {
       warn: "#a17612",
       err: "#8e2222",
       info: "#0e547d"
+    },
+    state: {
+      idle: { fg: "#857e6d", bg: "#ece5d2", dot: "#a8a190" },
+      typing: { fg: "#0c4670", bg: "#d5e6f3", dot: "#0e547d" },
+      thinking: { fg: "#4c2e95", bg: "#e1dbef", dot: "#7a5af5" },
+      streaming: { fg: "#7b2c10", bg: "#f0d8c4", dot: "#b8431a" },
+      running: { fg: "#7a5b0d", bg: "#f1e1bb", dot: "#a17612" },
+      approving: { fg: "#86234a", bg: "#efd9e6", dot: "#c1408a" },
+      ok: { fg: "#1f5e36", bg: "#cee8d5", dot: "#1f5e36" },
+      err: { fg: "#8e2222", bg: "#f0d6d6", dot: "#8e2222" }
+    },
+    modePalette: {
+      normal: { fg: "#28241b", bg: "#ece5d2", dot: "#28241b" },
+      plan: { fg: "#4c2e95", bg: "#e1dbef", dot: "#7a5af5" },
+      auto: { fg: "#b8431a", bg: "#f0d8c4", dot: "#b8431a" },
+      readonly: { fg: "#1f5e36", bg: "#cee8d5", dot: "#1f5e36" }
     },
     tag: {
       review: { bg: "#d5e6f3", fg: "#0c4670" },
@@ -736,6 +760,22 @@ test("TUI themes match the committed kaleid design tokens", () => {
       err: "#fca5a5",
       info: "#67e8f9"
     },
+    state: {
+      idle: { fg: "#8a8598", bg: "#1a1a28", dot: "#706c80" },
+      typing: { fg: "#67e8f9", bg: "#0b2a3a", dot: "#06b6d4" },
+      thinking: { fg: "#d8b4fe", bg: "#2a1448", dot: "#a855f7" },
+      streaming: { fg: "#fbcfe8", bg: "#3a1130", dot: "#ec4899" },
+      running: { fg: "#fde047", bg: "#3a2a08", dot: "#eab308" },
+      approving: { fg: "#fdba74", bg: "#3a2008", dot: "#f97316" },
+      ok: { fg: "#6ee7b7", bg: "#0a2a20", dot: "#10b981" },
+      err: { fg: "#fca5a5", bg: "#3a0c0c", dot: "#ef4444" }
+    },
+    modePalette: {
+      normal: { fg: "#e6e3f0", bg: "#1c1c2e", dot: "#a8a3c0" },
+      plan: { fg: "#d8b4fe", bg: "#2a1448", dot: "#a855f7" },
+      auto: { fg: "#fbcfe8", bg: "#3a1130", dot: "#ec4899" },
+      readonly: { fg: "#6ee7b7", bg: "#0a2a20", dot: "#10b981" }
+    },
     tag: {
       review: { bg: "#0b4456", fg: "#a5f3fc" },
       wip: { bg: "#4a3a0a", fg: "#fde047" },
@@ -762,6 +802,40 @@ test("TUI badges resolve design token palettes by semantic name", () => {
   assert.equal(getProjectTokenName("kaleid"), "kaleid");
   assert.equal(getProjectTokenName("web-app"), "web-app");
   assert.equal(getProjectTokenName("unknown") in daylightTheme.project, true);
+});
+
+test("TUI state chip maps only real Phase A agent states", () => {
+  assert.equal(formatStateChipText("idle"), "● idle");
+  assert.equal(formatStateChipText("ok"), "● ready");
+  assert.equal(formatStateChipText("err"), "● error");
+  assert.equal(
+    deriveAgentState({ busy: false, input: "", status: null, streaming: null }),
+    "idle"
+  );
+  assert.equal(
+    deriveAgentState({ busy: false, input: "hello", status: null, streaming: null }),
+    "typing"
+  );
+  assert.equal(
+    deriveAgentState({ busy: true, input: "", status: "thinking...", streaming: null }),
+    "thinking"
+  );
+  assert.equal(
+    deriveAgentState({ busy: true, input: "", status: null, streaming: "partial" }),
+    "streaming"
+  );
+  assert.equal(
+    deriveAgentState({ busy: true, input: "", status: "running bash", streaming: null }),
+    "running"
+  );
+  assert.equal(
+    deriveAgentState({ busy: false, input: "", status: null, streaming: null, lastRole: "assistant" }),
+    "ok"
+  );
+  assert.equal(
+    deriveAgentState({ busy: false, input: "", status: null, streaming: null, lastRole: "error" }),
+    "err"
+  );
 });
 
 test("TUI themes follow terminal appearance and fall back for low-color terminals", () => {
@@ -842,17 +916,21 @@ test("TUI header and option selector format model and reasoning state", () => {
     { id: "delta", current: true }
   ];
   assert.deepEqual(
-    getVisibleResumeFilterOptions(resumeFilterOptions, 40, false).map((option) => option.id),
-    [CLEAR_RESUME_FILTER_OPTION_ID, "delta"]
+    getVisibleResumeFilterOptions(resumeFilterOptions, 40, false, -1, "project").map((option) => option.id),
+    [CLEAR_RESUME_FILTER_OPTION_ID, "alpha", "delta"]
   );
   assert.deepEqual(
-    getVisibleResumeFilterOptions(resumeFilterOptions, 40, true, 4).map((option) => option.id),
+    getVisibleResumeFilterOptions(resumeFilterOptions, 80, true, 4, "project").map((option) => option.id),
     [CLEAR_RESUME_FILTER_OPTION_ID, "alpha", "beta", "gamma", "delta"]
   );
+  assert.deepEqual(getResumeFilterGroupWidths(62), { project: 20, label: 20 });
+  assert.deepEqual(getResumeFilterGroupWidths(40), { project: 9, label: 9 });
+  assert.deepEqual(getResumeFilterGroupWidths(30), { project: 8, label: 8 });
   assert.equal(
     formatResumeActivity({ messageCount: 12, updatedAt: "2026-05-22T12:00:00.000Z" }, Date.parse("2026-05-22T14:30:00.000Z")),
     "12 msgs · 2h"
   );
+  assert.equal(formatResumePreviewText({ lastAssistantMessage: "final answer\nwith details" }, 18), "final answer wi...");
   assert.deepEqual(
     resumeToOption({
       id: "session_1",
@@ -1041,7 +1119,7 @@ test("TUI selector Esc keeps chained model and standalone reasoning only changes
 test("TUI input footer reserves rows for status, slash menu, and OAuth paste mode", () => {
   assert.equal(
     getInputBarHeight({ manualCodePrompt: null, slashCommandCount: 4, slashMenuVisible: false, status: null }),
-    6
+    7
   );
   assert.equal(
     getInputBarHeight({
@@ -1052,11 +1130,11 @@ test("TUI input footer reserves rows for status, slash menu, and OAuth paste mod
       slashMenuVisible: false,
       status: null
     }),
-    7
+    8
   );
   assert.equal(
     getInputBarHeight({ manualCodePrompt: null, slashCommandCount: 4, slashMenuVisible: true, status: null }),
-    10
+    11
   );
   assert.equal(
     getInputBarHeight({
@@ -1065,7 +1143,7 @@ test("TUI input footer reserves rows for status, slash menu, and OAuth paste mod
       slashMenuVisible: true,
       status: "waiting"
     }),
-    9
+    10
   );
   assert.equal(formatStatusModel("gpt-5.5", "high"), "gpt-5.5 · high");
   const statusLayout = buildStatusLineLayout(
@@ -1115,7 +1193,6 @@ test("TUI input footer reserves rows for status, slash menu, and OAuth paste mod
     1 +
       textWidth(formattedTokenStatus) +
       getInputFooterGapWidth(80, formattedTokenStatus) +
-      textWidth(MULTILINE_INPUT_NEWLINE_HINT) +
       STATUS_LINE_RIGHT_MARGIN,
     80
   );
@@ -1135,6 +1212,9 @@ test("TUI input footer reserves rows for status, slash menu, and OAuth paste mod
   assert.equal(getMultilineInputRows("xxxx\nok", 4), 3);
   assert.equal(getMultilineInputRows("xxxx\nok", 4, { cursor: 7 }), 2);
   assert.equal(MULTILINE_INPUT_NEWLINE_HINT, "Enter send · Ctrl+J newline");
+  assert.equal(INPUT_COMPOSER_HINT, "Enter send · Ctrl+J newline · / commands · /model");
+  assert.doesNotMatch(formatInputHintBar("", 80), /@ files|plan/u);
+  assert.match(formatInputHintBar("one\ntwo", 80), /2 lines/u);
   assert.equal(shouldInsertInputNewline("j", { ctrl: true }), true);
   assert.equal(shouldInsertInputNewline("", { meta: true, return: true }), true);
   assert.equal(shouldInsertInputNewline("\n", {}), true);
@@ -1814,6 +1894,8 @@ test("session persistence writes jsonl and resume rebuilds compacted messages", 
     assert.equal(summaries[0]?.project, null);
     assert.equal(summaries[0]?.name, "first task");
     assert.equal(summaries[0]?.label, "first task");
+    assert.equal(summaries[0]?.lastAssistantMessage, "first answer");
+    assert.ok((summaries[0]?.contextTokens ?? 0) > 0);
 
     const restored = await loadSessionData("session_test");
     assert.equal(restored.metadata.model, "gpt-5.5");

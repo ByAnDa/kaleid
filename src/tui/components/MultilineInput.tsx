@@ -5,13 +5,14 @@ import { textWidth, wrapTextLine } from "./text-width.js";
 
 export const MAX_MULTILINE_INPUT_ROWS = 6;
 export const MULTILINE_INPUT_NEWLINE_HINT = "Enter send · Ctrl+J newline";
+export const INPUT_COMPOSER_HINT = "Enter send · Ctrl+J newline · / commands · /model";
 
 export interface MultilineInputProps {
   disabled: boolean;
   mask?: string;
   onChange: (value: string) => void;
   onSubmit?: (value: string) => void;
-  prompt: string;
+  promptSigil?: string;
   promptColor: string;
   theme: ResolvedTuiTheme;
   value: string;
@@ -89,6 +90,35 @@ function wrapDisplayValue(value: string, width: number): string[] {
   return value.split("\n").flatMap((line) => wrapTextLine(line, width));
 }
 
+export interface MultilineInputDisplayRow {
+  gutter: string;
+  hidden: boolean;
+  text: string;
+}
+
+export function getMultilineInputGutterWidth(value: string): number {
+  return Math.max(1, String(Math.max(1, value.split("\n").length)).length);
+}
+
+function getMultilineInputDisplayRows(value: string, width: number): MultilineInputDisplayRow[] {
+  const gutterWidth = getMultilineInputGutterWidth(value);
+  const valueWidth = Math.max(1, width - gutterWidth - 1);
+  const rows: MultilineInputDisplayRow[] = [];
+
+  value.split("\n").forEach((line, lineIndex) => {
+    const wrapped = wrapTextLine(line, valueWidth);
+    wrapped.forEach((text, wrapIndex) => {
+      rows.push({
+        gutter: lineIndex === 0 && wrapIndex === 0 ? "›" : wrapIndex === 0 ? String(lineIndex + 1) : "",
+        hidden: false,
+        text
+      });
+    });
+  });
+
+  return rows.length > 0 ? rows : [{ gutter: "›", hidden: false, text: "" }];
+}
+
 export function getMultilineInputRows(
   value: string,
   width: number,
@@ -133,7 +163,7 @@ export function MultilineInput({
   mask,
   onChange,
   onSubmit,
-  prompt,
+  promptSigil = "›",
   promptColor,
   theme,
   value,
@@ -142,15 +172,17 @@ export function MultilineInput({
   const [cursor, setCursor] = useState(value.length);
   const displayValue = useMemo(() => maskValue(value, mask), [mask, value]);
   const cursorValue = insertCursor(displayValue, clamp(cursor, 0, displayValue.length));
-  const promptWidth = textWidth(prompt);
-  const valueWidth = Math.max(1, width - promptWidth - 1);
-  const wrappedLines = wrapDisplayValue(cursorValue, valueWidth);
+  const gutterWidth = Math.max(getMultilineInputGutterWidth(cursorValue), textWidth(promptSigil));
+  const wrappedLines = getMultilineInputDisplayRows(cursorValue, width);
   const hiddenRows = Math.max(0, wrappedLines.length - MAX_MULTILINE_INPUT_ROWS);
   const visibleLines = wrappedLines.slice(-MAX_MULTILINE_INPUT_ROWS);
   if (hiddenRows > 0) {
-    visibleLines[0] = `... ${hiddenRows} earlier row${hiddenRows === 1 ? "" : "s"}`;
+    visibleLines[0] = {
+      gutter: "",
+      hidden: true,
+      text: `... ${hiddenRows} earlier row${hiddenRows === 1 ? "" : "s"}`
+    };
   }
-  const promptIndent = " ".repeat(promptWidth);
 
   useEffect(() => {
     setCursor((current) => clamp(current, 0, value.length));
@@ -218,18 +250,19 @@ export function MultilineInput({
   return (
     <Box flexDirection="column" minWidth={0} width={width}>
       {visibleLines.map((line, index) => {
-        const visiblePrompt = index === 0 ? prompt : promptIndent;
-        const fill = " ".repeat(Math.max(0, width - textWidth(visiblePrompt) - textWidth(line)));
+        const gutter = line.gutter.padStart(gutterWidth, " ");
+        const fill = " ".repeat(Math.max(0, width - textWidth(gutter) - 1 - textWidth(line.text)));
         return (
           <Text
             key={index}
             backgroundColor={theme.surface.canvas}
-            color={hiddenRows > 0 && index === 0 ? theme.text.faint : theme.text.primary}
+            color={line.hidden ? theme.text.faint : theme.text.primary}
           >
             <Text bold color={promptColor}>
-              {visiblePrompt}
+              {gutter}
             </Text>
-            {line}
+            <Text color={theme.text.faint}> </Text>
+            {line.text}
             {fill}
           </Text>
         );

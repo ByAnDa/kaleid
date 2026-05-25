@@ -60,6 +60,22 @@ const ANSI16_SEMANTIC_THEMES: Record<ThemeName, ThemeColorTokens> = {
       err: "red",
       info: "blue"
     },
+    state: {
+      idle: { fg: "gray", bg: "white", dot: "gray" },
+      typing: { fg: "blue", bg: "white", dot: "blue" },
+      thinking: { fg: "magenta", bg: "white", dot: "magenta" },
+      streaming: { fg: "blue", bg: "white", dot: "blue" },
+      running: { fg: "yellow", bg: "black", dot: "yellow" },
+      approving: { fg: "magenta", bg: "white", dot: "magenta" },
+      ok: { fg: "green", bg: "white", dot: "green" },
+      err: { fg: "red", bg: "white", dot: "red" }
+    },
+    modePalette: {
+      normal: { fg: "black", bg: "white", dot: "black" },
+      plan: { fg: "magenta", bg: "white", dot: "magenta" },
+      auto: { fg: "blue", bg: "white", dot: "blue" },
+      readonly: { fg: "green", bg: "white", dot: "green" }
+    },
     tag: {
       review: { bg: "red", fg: "white" },
       wip: { bg: "yellow", fg: "black" },
@@ -115,6 +131,22 @@ const ANSI16_SEMANTIC_THEMES: Record<ThemeName, ThemeColorTokens> = {
       warn: "yellow",
       err: "red",
       info: "blue"
+    },
+    state: {
+      idle: { fg: "gray", bg: "black", dot: "gray" },
+      typing: { fg: "cyan", bg: "black", dot: "cyan" },
+      thinking: { fg: "magenta", bg: "black", dot: "magenta" },
+      streaming: { fg: "magenta", bg: "black", dot: "magenta" },
+      running: { fg: "yellow", bg: "black", dot: "yellow" },
+      approving: { fg: "yellow", bg: "black", dot: "yellow" },
+      ok: { fg: "green", bg: "black", dot: "green" },
+      err: { fg: "red", bg: "black", dot: "red" }
+    },
+    modePalette: {
+      normal: { fg: "white", bg: "black", dot: "gray" },
+      plan: { fg: "magenta", bg: "black", dot: "magenta" },
+      auto: { fg: "magenta", bg: "black", dot: "magenta" },
+      readonly: { fg: "green", bg: "black", dot: "green" }
     },
     tag: {
       review: { bg: "red", fg: "white" },
@@ -221,6 +253,14 @@ function mapBadgeColors(badge: BadgeColorTokens, colorLevel: TerminalColorLevel)
   };
 }
 
+function mapStateColors<T extends BadgeColorTokens & { dot: string }>(state: T, colorLevel: TerminalColorLevel): T {
+  return {
+    bg: resolveThemeColor(state.bg, colorLevel),
+    fg: resolveThemeColor(state.fg, colorLevel),
+    dot: resolveThemeColor(state.dot, colorLevel)
+  } as T;
+}
+
 export function resolveThemeColor(hex: string, colorLevel: TerminalColorLevel): string {
   if (colorLevel === "truecolor") {
     return hex;
@@ -282,6 +322,22 @@ export function resolveTheme(theme: TuiTheme, colorLevel: TerminalColorLevel, mo
       warn: map(theme.status.warn),
       err: map(theme.status.err),
       info: map(theme.status.info)
+    },
+    state: {
+      idle: mapStateColors(theme.state.idle, colorLevel),
+      typing: mapStateColors(theme.state.typing, colorLevel),
+      thinking: mapStateColors(theme.state.thinking, colorLevel),
+      streaming: mapStateColors(theme.state.streaming, colorLevel),
+      running: mapStateColors(theme.state.running, colorLevel),
+      approving: mapStateColors(theme.state.approving, colorLevel),
+      ok: mapStateColors(theme.state.ok, colorLevel),
+      err: mapStateColors(theme.state.err, colorLevel)
+    },
+    modePalette: {
+      normal: mapStateColors(theme.modePalette.normal, colorLevel),
+      plan: mapStateColors(theme.modePalette.plan, colorLevel),
+      auto: mapStateColors(theme.modePalette.auto, colorLevel),
+      readonly: mapStateColors(theme.modePalette.readonly, colorLevel)
     },
     tag: {
       review: mapBadgeColors(theme.tag.review, colorLevel),

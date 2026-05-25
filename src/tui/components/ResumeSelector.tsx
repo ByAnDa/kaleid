@@ -14,6 +14,7 @@ export interface ResumeSelectorProps {
   filterSelectedIndex: number;
   labelOptions: readonly OptionSelectorItem[];
   projectOptions: readonly OptionSelectorItem[];
+  previewIndex?: number;
   selectedIndex: number;
   sessions: readonly SessionSummary[];
   theme: ResolvedTuiTheme;
@@ -40,8 +41,10 @@ function padRight(value: string, width: number): string {
   return `${value}${" ".repeat(Math.max(0, width - textLength(value)))}`;
 }
 
-export function getResumeSelectorHeight(sessionCount: number, filterExpanded = false): number {
-  return 3 + (filterExpanded ? 1 : 0) + Math.max(1, sessionCount);
+const RESUME_PREVIEW_MIN_ROWS = 7;
+
+export function getResumeSelectorHeight(sessionCount: number, filterExpanded = false, showPreview = false): number {
+  return 3 + (filterExpanded ? 1 : 0) + Math.max(1, sessionCount, showPreview ? RESUME_PREVIEW_MIN_ROWS : 1);
 }
 
 export function formatResumeActivity(session: Pick<SessionSummary, "messageCount" | "updatedAt">, nowMs = Date.now()): string {
@@ -71,55 +74,71 @@ export function formatResumeActivity(session: Pick<SessionSummary, "messageCount
   return `${session.messageCount} msgs · ${age}`;
 }
 
-export function formatResumeFilterChipLabel(option: OptionSelectorItem, kind: ResumeSelectorFilterKind): string {
+export function formatResumeFilterChipLabel(
+  option: OptionSelectorItem,
+  kind: ResumeSelectorFilterKind,
+  maxWidth = Number.POSITIVE_INFINITY
+): string {
   const raw = option.display ?? option.label ?? option.id;
   const display = raw === "全部" ? "all" : raw;
-  if (kind === "label" && option.id !== "__clear_resume_filter__" && !display.startsWith("#")) {
-    return `#${display}`;
-  }
-  return display;
+  const label = kind === "label" && option.id !== "__clear_resume_filter__" && !display.startsWith("#") ? `#${display}` : display;
+  return Number.isFinite(maxWidth) ? truncate(label, maxWidth) : label;
 }
 
-function chipLimit(width: number, active: boolean): number {
-  if (active) {
-    return width >= 72 ? 8 : 5;
-  }
-  if (width >= 100) {
-    return 5;
-  }
-  if (width >= 76) {
-    return 4;
-  }
-  return 2;
+function optionChipWidth(option: OptionSelectorItem, kind: ResumeSelectorFilterKind): number {
+  return textLength(formatResumeFilterChipLabel(option, kind, 12)) + 3;
+}
+
+function overflowChipWidth(count: number): number {
+  return count > 0 ? textLength(` +${count} `) + 1 : 0;
 }
 
 export function getVisibleResumeFilterOptions(
   options: readonly OptionSelectorItem[],
   width: number,
   active: boolean,
-  selectedIndex = -1
+  selectedIndex = -1,
+  kind: ResumeSelectorFilterKind = "project"
 ): OptionSelectorItem[] {
-  const limit = Math.min(options.length, chipLimit(width, active));
-  if (limit >= options.length) {
+  const maxWidth = Math.max(0, width - textLength(kind));
+  if (options.length === 0 || maxWidth <= 0) {
+    return [];
+  }
+
+  if (options.reduce((total, option) => total + optionChipWidth(option, kind), 0) <= maxWidth) {
     return [...options];
   }
 
   const selected = active ? selectedIndex : options.findIndex((option) => option.current);
-  const keepIds = new Set<string>();
-  const add = (index: number): void => {
+  const visible: OptionSelectorItem[] = [];
+  const visibleIds = new Set<string>();
+  const add = (index: number, reserveOverflow = true): boolean => {
     const option = options[index];
-    if (option && keepIds.size < limit) {
-      keepIds.add(option.id);
+    if (!option || visibleIds.has(option.id)) {
+      return false;
     }
+
+    const nextHiddenCount = options.length - visible.length - 1;
+    const nextWidth =
+      visible.reduce((total, item) => total + optionChipWidth(item, kind), 0) +
+      optionChipWidth(option, kind) +
+      (reserveOverflow ? overflowChipWidth(nextHiddenCount) : 0);
+    if (nextWidth > maxWidth) {
+      return false;
+    }
+
+    visible.push(option);
+    visibleIds.add(option.id);
+    return true;
   };
 
   add(0);
   add(selected);
-  for (let index = 0; index < options.length && keepIds.size < limit; index += 1) {
+  for (let index = 0; index < options.length; index += 1) {
     add(index);
   }
 
-  return options.filter((option) => keepIds.has(option.id));
+  return visible.length > 0 ? options.filter((option) => visibleIds.has(option.id)) : [];
 }
 
 function FilterChip({
@@ -163,12 +182,17 @@ function FilterGroup({
 }): React.ReactElement {
   const isActiveFilter = activeFilter === kind;
   const isFocused = focus === kind || isActiveFilter;
-  const visibleOptions = getVisibleResumeFilterOptions(options, width, isActiveFilter, selectedIndex);
+  const visibleOptions = getVisibleResumeFilterOptions(options, width, isActiveFilter, selectedIndex, kind);
   const overflow = Math.max(0, options.length - visibleOptions.length);
   const selectedOption = selectedIndex >= 0 ? options[selectedIndex] : null;
+  const usedWidth =
+    textLength(kind) +
+    visibleOptions.reduce((total, option) => total + optionChipWidth(option, kind), 0) +
+    overflowChipWidth(overflow);
+  const fill = " ".repeat(Math.max(0, width - usedWidth));
 
   return (
-    <>
+    <Box flexDirection="row" overflow="hidden" width={width}>
       <Text backgroundColor={theme.surface.canvas} color={isFocused ? theme.accent.default : theme.text.muted}>
         {kind}
       </Text>
@@ -178,7 +202,7 @@ function FilterGroup({
           <FilterChip
             active={isActiveFilter && option.id === selectedOption?.id}
             current={option.current}
-            label={formatResumeFilterChipLabel(option, kind)}
+            label={formatResumeFilterChipLabel(option, kind, 12)}
             theme={theme}
           />
         </React.Fragment>
@@ -189,7 +213,8 @@ function FilterGroup({
           <FilterChip active={false} current={false} label={`+${overflow}`} theme={theme} />
         </>
       ) : null}
-    </>
+      <Text backgroundColor={theme.surface.canvas}>{fill}</Text>
+    </Box>
   );
 }
 
@@ -206,7 +231,7 @@ function FilterChoices({
   theme: ResolvedTuiTheme;
   width: number;
 }): React.ReactElement {
-  const visibleOptions = getVisibleResumeFilterOptions(options, width, true, selectedIndex);
+  const visibleOptions = getVisibleResumeFilterOptions(options, width - 10, true, selectedIndex, kind);
   const overflow = Math.max(0, options.length - visibleOptions.length);
   const selectedOption = selectedIndex >= 0 ? options[selectedIndex] : null;
 
@@ -224,7 +249,7 @@ function FilterChoices({
           <FilterChip
             active={option.id === selectedOption?.id}
             current={option.current}
-            label={formatResumeFilterChipLabel(option, kind)}
+            label={formatResumeFilterChipLabel(option, kind, 12)}
             theme={theme}
           />
         </React.Fragment>
@@ -263,6 +288,19 @@ function ResumeHeader({ theme, width }: { theme: ResolvedTuiTheme; width: number
       </Text>
     </Box>
   );
+}
+
+function getResumeFilterTitle(width: number): string {
+  return width < 34 ? "resume" : "resume session";
+}
+
+export function getResumeFilterGroupWidths(width: number): { project: number; label: number } {
+  const innerWidth = Math.max(1, width - 2);
+  const fixedWidth = textLength(getResumeFilterTitle(width)) + textLength(" │ ") * 2;
+  const available = Math.max(textLength("project") + textLength("label"), innerWidth - fixedWidth);
+  const project = Math.max(textLength("project"), Math.floor(available / 2));
+  const label = Math.max(textLength("label"), available - project);
+  return { project, label };
 }
 
 function ResumeRow({
@@ -339,11 +377,81 @@ function ResumeRow({
   );
 }
 
+function formatResumeTokenCount(tokens: number | undefined): string {
+  const value = Math.max(0, tokens ?? 0);
+  if (value >= 1000) {
+    const scaled = value / 1000;
+    return `${scaled >= 100 ? Math.round(scaled) : scaled.toFixed(1)}K`;
+  }
+  return String(value);
+}
+
+export function formatResumePreviewText(session: Pick<SessionSummary, "lastAssistantMessage">, width: number): string {
+  const source = session.lastAssistantMessage?.replace(/\s+/gu, " ").trim() || "No assistant reply yet.";
+  return truncate(source, Math.max(1, width));
+}
+
+function ResumePreviewPane({
+  session,
+  theme,
+  width
+}: {
+  session: SessionSummary | undefined;
+  theme: ResolvedTuiTheme;
+  width: number;
+}): React.ReactElement {
+  const innerWidth = Math.max(1, width - 2);
+  if (!session) {
+    return (
+      <Box borderColor={theme.border.subtle} borderStyle="single" flexDirection="column" width={width}>
+        <Text backgroundColor={theme.surface.canvas} color={theme.text.faint}>
+          No session selected.
+        </Text>
+      </Box>
+    );
+  }
+
+  const meta = [
+    `model ${session.model ?? "-"}`,
+    `${session.messageCount} msgs`,
+    `ctx ${formatResumeTokenCount(session.contextTokens)}`,
+    formatResumeActivity(session)
+  ];
+  const preview = formatResumePreviewText(session, innerWidth);
+  const previewFill = " ".repeat(Math.max(0, innerWidth - textLength(preview)));
+
+  return (
+    <Box borderColor={theme.border.subtle} borderStyle="single" flexDirection="column" width={width}>
+      <Text backgroundColor={theme.surface.canvas} color={theme.text.muted}>
+        preview
+      </Text>
+      <Text backgroundColor={theme.surface.canvas} color={theme.text.primary}>
+        {preview}
+        {previewFill}
+      </Text>
+      <Text backgroundColor={theme.surface.canvas} color={theme.text.faint}>
+        {"─".repeat(innerWidth)}
+      </Text>
+      {meta.map((line) => {
+        const visible = truncate(line, innerWidth);
+        const fill = " ".repeat(Math.max(0, innerWidth - textLength(visible)));
+        return (
+          <Text key={line} backgroundColor={theme.surface.canvas} color={theme.text.muted}>
+            {visible}
+            {fill}
+          </Text>
+        );
+      })}
+    </Box>
+  );
+}
+
 export function ResumeSelector({
   activeFilter,
   filterFocus,
   filterSelectedIndex,
   labelOptions,
+  previewIndex,
   projectOptions,
   selectedIndex,
   sessions,
@@ -351,13 +459,20 @@ export function ResumeSelector({
   width
 }: ResumeSelectorProps): React.ReactElement {
   const activeOptions = activeFilter === "project" ? projectOptions : activeFilter === "label" ? labelOptions : [];
-  const height = getResumeSelectorHeight(sessions.length, activeFilter !== null);
+  const groupWidths = getResumeFilterGroupWidths(width);
+  const filterTitle = getResumeFilterTitle(width);
+  const showPreview = width >= 104 && sessions.length > 0;
+  const height = getResumeSelectorHeight(sessions.length, activeFilter !== null, showPreview);
+  const previewWidth = showPreview ? Math.min(36, Math.max(28, Math.floor(width * 0.34))) : 0;
+  const listWidth = showPreview ? Math.max(1, width - previewWidth - 1) : width;
+  const selectedPreviewIndex = Math.max(0, Math.min(previewIndex ?? selectedIndex, sessions.length - 1));
+  const selectedPreviewSession = sessions[selectedPreviewIndex];
 
   return (
     <Box flexDirection="column" flexShrink={0} height={height} width={width}>
-      <Box flexDirection="row" height={1} overflow="hidden" paddingX={1} width={width}>
+      <Box flexDirection="row" height={1} paddingX={1} width={width}>
         <Text backgroundColor={theme.surface.canvas} color={filterFocus === "sessions" ? theme.accent.default : theme.text.muted}>
-          resume session
+          {filterTitle}
         </Text>
         <Text backgroundColor={theme.surface.canvas} color={theme.text.faint}>
           {" │ "}
@@ -369,7 +484,7 @@ export function ResumeSelector({
           options={projectOptions}
           selectedIndex={activeFilter === "project" ? filterSelectedIndex : -1}
           theme={theme}
-          width={width}
+          width={groupWidths.project}
         />
         <Text backgroundColor={theme.surface.canvas} color={theme.text.faint}>
           {" │ "}
@@ -381,7 +496,7 @@ export function ResumeSelector({
           options={labelOptions}
           selectedIndex={activeFilter === "label" ? filterSelectedIndex : -1}
           theme={theme}
-          width={width}
+          width={groupWidths.label}
         />
       </Box>
       {activeFilter ? (
@@ -396,25 +511,37 @@ export function ResumeSelector({
       <Text backgroundColor={theme.surface.canvas} color={theme.border.subtle}>
         {"─".repeat(Math.max(1, width))}
       </Text>
-      <ResumeHeader theme={theme} width={width} />
-      {sessions.length === 0 ? (
-        <Box paddingX={1} width={width}>
-          <Text backgroundColor={theme.surface.canvas} color={theme.status.warn}>
-            无匹配会话
-          </Text>
+      <Box flexDirection="row" width={width}>
+        <Box flexDirection="column" width={listWidth}>
+          <ResumeHeader theme={theme} width={listWidth} />
+          {sessions.length === 0 ? (
+            <Box paddingX={1} width={listWidth}>
+              <Text backgroundColor={theme.surface.canvas} color={theme.status.warn}>
+                无匹配会话
+              </Text>
+            </Box>
+          ) : (
+            sessions.map((session, index) => (
+              <ResumeRow
+                key={session.id}
+                index={index}
+                selected={filterFocus === "sessions" && index === selectedIndex}
+                session={session}
+                theme={theme}
+                width={listWidth}
+              />
+            ))
+          )}
         </Box>
-      ) : (
-        sessions.map((session, index) => (
-          <ResumeRow
-            key={session.id}
-            index={index}
-            selected={filterFocus === "sessions" && index === selectedIndex}
-            session={session}
-            theme={theme}
-            width={width}
-          />
-        ))
-      )}
+        {showPreview ? (
+          <>
+            <Text backgroundColor={theme.surface.canvas} color={theme.border.subtle}>
+              │
+            </Text>
+            <ResumePreviewPane session={selectedPreviewSession} theme={theme} width={previewWidth} />
+          </>
+        ) : null}
+      </Box>
     </Box>
   );
 }

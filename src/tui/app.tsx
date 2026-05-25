@@ -45,6 +45,7 @@ import {
 } from "./commands.js";
 import { Conversation } from "./components/Conversation.js";
 import { InputBar, getInputBarHeight } from "./components/InputBar.js";
+import type { AgentState } from "./components/StateChip.js";
 import {
   OptionSelector,
   getOptionSelectorHeight,
@@ -101,6 +102,7 @@ function messagesToHistory(messages: Session["messages"]): Msg[] {
             tool: {
               name: "tool",
               args: message.toolCallId ? { toolCallId: message.toolCallId } : {},
+              result: message.content,
               resultSummary: summarize(message.content),
               isError: false
             }
@@ -116,6 +118,40 @@ export function resumeToOption(session: SessionSummary): OptionSelectorItem {
     display: `${session.label}${model}`,
     current: false
   };
+}
+
+export interface AgentStateInput {
+  busy: boolean;
+  input: string;
+  lastRole?: Msg["role"];
+  status: string | null;
+  streaming: string | null;
+}
+
+export function deriveAgentState({ busy, input, lastRole, status, streaming }: AgentStateInput): AgentState {
+  const normalizedStatus = status?.toLowerCase() ?? "";
+  if (lastRole === "error" && !busy) {
+    return "err";
+  }
+  if (normalizedStatus.startsWith("running")) {
+    return "running";
+  }
+  if (streaming !== null) {
+    return "streaming";
+  }
+  if (busy && normalizedStatus.startsWith("thinking")) {
+    return "thinking";
+  }
+  if (busy) {
+    return "running";
+  }
+  if (input.length > 0) {
+    return "typing";
+  }
+  if (lastRole === "assistant" || lastRole === "tool" || lastRole === "system") {
+    return "ok";
+  }
+  return "idle";
 }
 
 export interface ResumeFilterState {
@@ -511,6 +547,8 @@ export function App({
   const [renameInputActive, setRenameInputActive] = useState(false);
   const [busy, setBusy] = useState(false);
   const [manualCodePrompt, setManualCodePrompt] = useState<string | null>(null);
+  const [focusedToolId, setFocusedToolId] = useState<string | null>(null);
+  const [expandedToolIds, setExpandedToolIds] = useState<Set<string>>(() => new Set());
   const abortRef = useRef<AbortController | null>(null);
   const manualCodeRef = useRef<{ resolve: (value: string) => void; reject: (error: Error) => void } | null>(null);
   const slashCompletions = useMemo(() => getSlashCommandCompletions(input), [input]);
@@ -528,6 +566,22 @@ export function App({
     slashMenuOpen &&
     slashCompletions !== null;
   const selectedSlashIndex = slashCandidates.length === 0 ? -1 : Math.min(slashMenuIndex, slashCandidates.length - 1);
+  const toolMessageIds = useMemo(
+    () => history.filter((message) => message.role === "tool" && message.tool).map((message) => message.id),
+    [history]
+  );
+  const toolFocusActive = focusedToolId !== null;
+  const agentState = useMemo(
+    () =>
+      deriveAgentState({
+        busy,
+        input,
+        lastRole: history.at(-1)?.role,
+        status,
+        streaming
+      }),
+    [busy, history, input, status, streaming]
+  );
   const currentProvider = useMemo(
     () => getProviderForModel(currentModel, availableModels),
     [availableModels, currentModel]
@@ -591,8 +645,9 @@ export function App({
     activeSelector === "resume" || activeSelector === "resumeProjectFilter" || activeSelector === "resumeLabelFilter";
   const genericSelectorVisible = selectorVisible && !resumeSelectorVisible;
   const resumeRows = useMemo(() => filterSessions(resumeSessions, resumeFilter), [resumeFilter, resumeSessions]);
+  const resumePreviewVisible = resumeSelectorVisible && terminal.columns >= 104 && resumeRows.length > 0;
   const selectorHeight = resumeSelectorVisible
-    ? getResumeSelectorHeight(resumeRows.length, activeSelector !== "resume")
+    ? getResumeSelectorHeight(resumeRows.length, activeSelector !== "resume", resumePreviewVisible)
     : genericSelectorVisible
       ? getOptionSelectorHeight(selectorOptions.length)
       : 0;
@@ -626,6 +681,43 @@ export function App({
   const commit = useCallback((msg: Msg) => {
     setHistory((current) => [...current, msg]);
   }, []);
+
+  const focusTool = useCallback(
+    (direction: -1 | 1) => {
+      if (toolMessageIds.length === 0) {
+        setFocusedToolId(null);
+        return;
+      }
+
+      setFocusedToolId((current) => {
+        const currentIndex = current ? toolMessageIds.indexOf(current) : -1;
+        const nextIndex =
+          currentIndex < 0
+            ? direction > 0
+              ? 0
+              : toolMessageIds.length - 1
+            : moveSelection(currentIndex, direction, toolMessageIds.length);
+        return toolMessageIds[nextIndex] ?? null;
+      });
+    },
+    [toolMessageIds]
+  );
+
+  const toggleFocusedTool = useCallback(() => {
+    setExpandedToolIds((current) => {
+      if (!focusedToolId) {
+        return current;
+      }
+
+      const next = new Set(current);
+      if (next.has(focusedToolId)) {
+        next.delete(focusedToolId);
+      } else {
+        next.add(focusedToolId);
+      }
+      return next;
+    });
+  }, [focusedToolId]);
 
   const updateInput = useCallback((value: string) => {
     if (activeSelector || activeCombobox) {
@@ -1028,6 +1120,12 @@ export function App({
     }
   }, [openResumeSelector, openResumeSelectorOnStart]);
 
+  useEffect(() => {
+    if (focusedToolId && !toolMessageIds.includes(focusedToolId)) {
+      setFocusedToolId(null);
+    }
+  }, [focusedToolId, toolMessageIds]);
+
   const applySelector = useCallback(() => {
     const selected = selectorOptions[selectedSelectorIndex];
     if (!activeSelector || !selected) {
@@ -1153,6 +1251,42 @@ export function App({
       } else {
         exit();
       }
+    }
+
+    if (
+      !activeSelector &&
+      !activeCombobox &&
+      !renameInputActive &&
+      !manualCodePrompt &&
+      toolMessageIds.length > 0 &&
+      key.ctrl &&
+      (key.upArrow || key.downArrow)
+    ) {
+      focusTool(key.upArrow ? -1 : 1);
+      return;
+    }
+
+    if (toolFocusActive) {
+      if (key.escape) {
+        setFocusedToolId(null);
+        return;
+      }
+
+      if (key.upArrow) {
+        focusTool(-1);
+        return;
+      }
+
+      if (key.downArrow) {
+        focusTool(1);
+        return;
+      }
+
+      if (key.return || value === " ") {
+        toggleFocusedTool();
+      }
+
+      return;
     }
 
     if (renameInputActive) {
@@ -1571,6 +1705,7 @@ export function App({
               tool: {
                 name: event.call.name,
                 args: event.call.arguments,
+                result: event.result.output,
                 resultSummary: summarize(event.result.output),
                 isError: event.result.isError
               }
@@ -1645,6 +1780,8 @@ export function App({
   return (
     <Box flexDirection="column" height={terminal.rows} width={terminal.columns}>
       <Conversation
+        expandedToolIds={expandedToolIds}
+        focusedToolId={focusedToolId}
         height={conversationHeight}
         messages={history}
         streaming={streaming}
@@ -1660,6 +1797,7 @@ export function App({
           filterFocus={resumeFocus}
           filterSelectedIndex={selectedSelectorIndex}
           labelOptions={resumeLabelFilterOptions}
+          previewIndex={selectedSelectorIndex}
           projectOptions={resumeProjectFilterOptions}
           selectedIndex={activeSelector === "resume" && resumeFocus === "sessions" ? selectedSelectorIndex : -1}
           sessions={resumeRows}
@@ -1697,18 +1835,19 @@ export function App({
         />
       ) : null}
       <InputBar
-        disabled={selectorVisible || comboboxVisible || (busy && !manualCodePrompt)}
-        disabledLabel={selectorVisible || comboboxVisible ? "" : undefined}
+        disabled={selectorVisible || comboboxVisible || toolFocusActive || (busy && !manualCodePrompt)}
+        disabledLabel={selectorVisible || comboboxVisible || toolFocusActive ? "" : undefined}
         input={input}
         inputMask={manualInputMask}
         inputPrompt={renameInputActive ? RENAME_INPUT_PROMPT : undefined}
         manualCodePrompt={manualCodePrompt}
         onChange={updateInput}
-        onSubmit={slashMenuVisible || selectorVisible ? undefined : submit}
+        onSubmit={slashMenuVisible || selectorVisible || toolFocusActive ? undefined : submit}
         selectedSlashIndex={selectedSlashIndex}
         slashCandidates={slashCandidates}
         slashCommandCount={slashCandidates.length}
         slashMenuVisible={slashMenuVisible}
+        state={agentState}
         status={status}
         theme={theme}
         tokenState={tokenState}

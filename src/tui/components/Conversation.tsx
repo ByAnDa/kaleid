@@ -37,7 +37,11 @@ function estimateLabeledTextRows(label: string, text: string, width: number): nu
   return formatMessageRows(text, label, width).length;
 }
 
-export function estimateConversationEntryRows(entry: ConversationEntry, width: number): number {
+export function estimateConversationEntryRows(
+  entry: ConversationEntry,
+  width: number,
+  expandedToolIds: ReadonlySet<string> = new Set()
+): number {
   if (entry.kind === "welcome") {
     return entry.visibleRows ?? WELCOME_BANNER_ROWS;
   }
@@ -48,18 +52,25 @@ export function estimateConversationEntryRows(entry: ConversationEntry, width: n
 
   if (entry.msg.role === "tool" && entry.msg.tool) {
     const contentWidth = Math.max(1, width - 2);
+    if (expandedToolIds.has(entry.msg.id)) {
+      return 1 + Math.min(8, estimateWrappedLineCount(entry.msg.tool.result || entry.msg.tool.resultSummary, contentWidth));
+    }
     return estimateWrappedLineCount(formatToolCallLine(entry.msg.tool, contentWidth), contentWidth);
   }
 
   return estimateLabeledTextRows(getMessageStyle(entry.msg.role).label, entry.msg.text, width);
 }
 
-export function estimateConversationRows(entries: readonly ConversationEntry[], width: number): number {
+export function estimateConversationRows(
+  entries: readonly ConversationEntry[],
+  width: number,
+  expandedToolIds: ReadonlySet<string> = new Set()
+): number {
   if (entries.length === 0) {
     return 0;
   }
 
-  return entries.reduce((total, entry) => total + estimateConversationEntryRows(entry, width), 0) + entries.length - 1;
+  return entries.reduce((total, entry) => total + estimateConversationEntryRows(entry, width, expandedToolIds), 0) + entries.length - 1;
 }
 
 function trimTextToRows(text: string, label: string, height: number, width: number): string {
@@ -120,7 +131,8 @@ function trimEntryToHeight(entry: ConversationEntry, height: number, width: numb
 export function getVisibleConversationEntries(
   entries: ConversationEntry[],
   height: number,
-  width: number
+  width: number,
+  expandedToolIds: ReadonlySet<string> = new Set()
 ): ConversationEntry[] {
   if (height <= 0) {
     return [];
@@ -136,7 +148,7 @@ export function getVisibleConversationEntries(
     }
 
     const separatorRows = visible.length > 0 ? 1 : 0;
-    const rows = estimateConversationEntryRows(entry, width);
+    const rows = estimateConversationEntryRows(entry, width, expandedToolIds);
     if (usedRows + separatorRows + rows > height) {
       if (visible.length === 0) {
         visible.unshift(trimEntryToHeight(entry, height, width));
@@ -157,6 +169,8 @@ export function getVisibleConversationEntries(
 }
 
 export interface ConversationProps {
+  expandedToolIds?: ReadonlySet<string>;
+  focusedToolId?: string | null;
   messages: Msg[];
   streaming: string | null;
   height: number;
@@ -165,10 +179,19 @@ export interface ConversationProps {
   width: number;
 }
 
-export function Conversation({ messages, streaming, height, theme, welcome, width }: ConversationProps): React.ReactElement {
+export function Conversation({
+  expandedToolIds = new Set(),
+  focusedToolId = null,
+  messages,
+  streaming,
+  height,
+  theme,
+  welcome,
+  width
+}: ConversationProps): React.ReactElement {
   const allEntries = buildConversationEntries(messages, streaming, welcome);
-  const entries = getVisibleConversationEntries(allEntries, height, width);
-  const usedRows = estimateConversationRows(entries, width);
+  const entries = getVisibleConversationEntries(allEntries, height, width, expandedToolIds);
+  const usedRows = estimateConversationRows(entries, width, expandedToolIds);
   const emptyRows = Math.max(0, height - usedRows);
   const overflowed = entries.length < allEntries.length;
   const fill = " ".repeat(Math.max(1, width));
@@ -192,7 +215,14 @@ export function Conversation({ messages, streaming, height, theme, welcome, widt
       ) : entry.kind === "streaming" ? (
         <Message key={entry.id} msg={{ id: entry.id, role: "assistant", text: entry.text }} theme={theme} width={width} />
       ) : (
-        <Message key={entry.id} msg={entry.msg} theme={theme} width={width} />
+        <Message
+          expandedToolIds={expandedToolIds}
+          focusedToolId={focusedToolId}
+          key={entry.id}
+          msg={entry.msg}
+          theme={theme}
+          width={width}
+        />
       );
 
     if (index === entries.length - 1) {

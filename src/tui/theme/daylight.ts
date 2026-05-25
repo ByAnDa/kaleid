@@ -40,6 +40,22 @@ export const daylightTheme: TuiTheme = {
     err: "#8e2222",
     info: "#0e547d"
   },
+  state: {
+    idle: { fg: "#857e6d", bg: "#ece5d2", dot: "#a8a190" },
+    typing: { fg: "#0c4670", bg: "#d5e6f3", dot: "#0e547d" },
+    thinking: { fg: "#4c2e95", bg: "#e1dbef", dot: "#7a5af5" },
+    streaming: { fg: "#7b2c10", bg: "#f0d8c4", dot: "#b8431a" },
+    running: { fg: "#7a5b0d", bg: "#f1e1bb", dot: "#a17612" },
+    approving: { fg: "#86234a", bg: "#efd9e6", dot: "#c1408a" },
+    ok: { fg: "#1f5e36", bg: "#cee8d5", dot: "#1f5e36" },
+    err: { fg: "#8e2222", bg: "#f0d6d6", dot: "#8e2222" }
+  },
+  modePalette: {
+    normal: { fg: "#28241b", bg: "#ece5d2", dot: "#28241b" },
+    plan: { fg: "#4c2e95", bg: "#e1dbef", dot: "#7a5af5" },
+    auto: { fg: "#b8431a", bg: "#f0d8c4", dot: "#b8431a" },
+    readonly: { fg: "#1f5e36", bg: "#cee8d5", dot: "#1f5e36" }
+  },
   tag: {
     review: { bg: "#d5e6f3", fg: "#0c4670" },
     wip: { bg: "#f1e1bb", fg: "#7a5b0d" },

@@ -40,6 +40,22 @@ export const spectrumTheme: TuiTheme = {
     err: "#fca5a5",
     info: "#67e8f9"
   },
+  state: {
+    idle: { fg: "#8a8598", bg: "#1a1a28", dot: "#706c80" },
+    typing: { fg: "#67e8f9", bg: "#0b2a3a", dot: "#06b6d4" },
+    thinking: { fg: "#d8b4fe", bg: "#2a1448", dot: "#a855f7" },
+    streaming: { fg: "#fbcfe8", bg: "#3a1130", dot: "#ec4899" },
+    running: { fg: "#fde047", bg: "#3a2a08", dot: "#eab308" },
+    approving: { fg: "#fdba74", bg: "#3a2008", dot: "#f97316" },
+    ok: { fg: "#6ee7b7", bg: "#0a2a20", dot: "#10b981" },
+    err: { fg: "#fca5a5", bg: "#3a0c0c", dot: "#ef4444" }
+  },
+  modePalette: {
+    normal: { fg: "#e6e3f0", bg: "#1c1c2e", dot: "#a8a3c0" },
+    plan: { fg: "#d8b4fe", bg: "#2a1448", dot: "#a855f7" },
+    auto: { fg: "#fbcfe8", bg: "#3a1130", dot: "#ec4899" },
+    readonly: { fg: "#6ee7b7", bg: "#0a2a20", dot: "#10b981" }
+  },
   tag: {
     review: { bg: "#0b4456", fg: "#a5f3fc" },
     wip: { bg: "#4a3a0a", fg: "#fde047" },

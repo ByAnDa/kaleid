@@ -7,10 +7,13 @@ import type { ResolvedTuiTheme, TerminalAppearance, TerminalColorLevel, ThemeMod
 export type {
   BadgeColorTokens,
   GutterStyle,
+  ModeTokenName,
   ProjectTokenName,
   ResolvedTuiTheme,
   RoleColorTokens,
   RoleTokenName,
+  StateColorTokens,
+  StateTokenName,
   StatusTokenName,
   TagTokenName,
   TerminalAppearance,

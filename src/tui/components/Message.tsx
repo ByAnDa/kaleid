@@ -65,16 +65,28 @@ export function formatMessageRows(text: string, label: string, width: number): M
 }
 
 export function Message({
+  expandedToolIds,
+  focusedToolId,
   msg,
   theme,
   width
 }: {
+  expandedToolIds?: ReadonlySet<string>;
+  focusedToolId?: string | null;
   msg: Msg;
   theme: ResolvedTuiTheme;
   width?: number;
 }): React.ReactElement {
   if (msg.role === "tool" && msg.tool) {
-    return <ToolCall theme={theme} tool={msg.tool} width={width} />;
+    return (
+      <ToolCall
+        expanded={expandedToolIds?.has(msg.id) ?? false}
+        focused={focusedToolId === msg.id}
+        theme={theme}
+        tool={msg.tool}
+        width={width}
+      />
+    );
   }
 
   const style = getMessageStyle(msg.role, theme);

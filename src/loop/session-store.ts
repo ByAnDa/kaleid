@@ -1,6 +1,7 @@
 import { appendFile, mkdir, readdir, readFile, stat } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
+import { estimateMessagesTokenCount } from "./compaction.js";
 import type { ReasoningEffort } from "../provider/models.js";
 import type { ChatMessage } from "../provider/types.js";
 
@@ -49,6 +50,8 @@ export interface SessionSummary {
   model?: string;
   reasoningEffort?: ReasoningEffort;
   messageCount: number;
+  contextTokens?: number;
+  lastAssistantMessage?: string | null;
 }
 
 export interface SessionSummaryFilter {
@@ -167,6 +170,16 @@ export function formatSessionDisplayName(
   return labelText.length > 0 ? `${base} ${labelText.join(" ")}` : base;
 }
 
+function lastAssistantMessage(messages: readonly ChatMessage[]): string | null {
+  for (let index = messages.length - 1; index >= 0; index -= 1) {
+    const message = messages[index];
+    if (message?.role === "assistant" && message.content.trim().length > 0) {
+      return message.content.trim();
+    }
+  }
+  return null;
+}
+
 export async function appendSessionEntries(id: string, entries: SessionStoreEntry[]): Promise<void> {
   if (entries.length === 0) {
     return;
@@ -258,7 +271,9 @@ export async function listSessions(): Promise<SessionSummary[]> {
         updatedAt,
         model: data.metadata.model,
         reasoningEffort: data.metadata.reasoningEffort,
-        messageCount: data.messages.length
+        messageCount: data.messages.length,
+        contextTokens: estimateMessagesTokenCount(data.messages),
+        lastAssistantMessage: lastAssistantMessage(data.messages)
       });
     } catch {
       continue;
