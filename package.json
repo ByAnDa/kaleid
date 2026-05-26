@@ -1,6 +1,6 @@
 {
   "name": "kaleid",
-  "version": "0.0.15",
+  "version": "0.0.16",
   "description": "A terminal coding harness agent for OpenAI Codex OAuth.",
   "type": "module",
   "license": "UNLICENSED",
