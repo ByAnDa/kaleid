@@ -2,7 +2,7 @@ import React from "react";
 import { Box, Text } from "ink";
 import { RoleGutter } from "./RoleGutter.js";
 import type { ResolvedTuiTheme } from "../theme/index.js";
-import { textWidth, truncateEnd } from "./text-width.js";
+import { textWidth, truncateEnd, wrapTextLine } from "./text-width.js";
 
 export interface ToolCallView {
   name: string;
@@ -54,17 +54,13 @@ export function formatToolCallLine(tool: ToolCallView, width = 80): string {
   return truncateEnd(base, width);
 }
 
-function formatExpandedToolRows(tool: ToolCallView, width: number): string[] {
+export function formatExpandedToolRows(tool: ToolCallView, width: number): string[] {
   const bodyWidth = Math.max(1, width - 2);
   const source = tool.result && tool.result.length > 0 ? tool.result : tool.resultSummary;
-  const lines = source.split(/\r?\n/u).flatMap((line) => {
-    const chunks: string[] = [];
-    for (let index = 0; index < Math.max(1, line.length); index += bodyWidth) {
-      chunks.push(line.slice(index, index + bodyWidth) || "");
-    }
-    return chunks;
-  });
-  return lines.slice(0, 8).map((line) => truncateEnd(line, bodyWidth));
+  return source
+    .split(/\r?\n/u)
+    .flatMap((line) => wrapTextLine(line, bodyWidth))
+    .map((line) => truncateEnd(line, bodyWidth));
 }
 
 export function ToolCall({

@@ -96,27 +96,43 @@ export interface MultilineInputDisplayRow {
   text: string;
 }
 
-export function getMultilineInputGutterWidth(value: string): number {
-  return Math.max(1, String(Math.max(1, value.split("\n").length)).length);
+export function getMultilineInputGutterWidth(value: string, promptSigil = "›"): number {
+  const lineNumberWidth = String(Math.max(1, value.split("\n").length)).length;
+  return Math.max(1, textWidth(promptSigil) + lineNumberWidth);
 }
 
-function getMultilineInputDisplayRows(value: string, width: number): MultilineInputDisplayRow[] {
-  const gutterWidth = getMultilineInputGutterWidth(value);
-  const valueWidth = Math.max(1, width - gutterWidth - 1);
+function getMultilineInputValueWidth(value: string, width: number, promptSigil = "›"): number {
+  return Math.max(1, width - getMultilineInputGutterWidth(value, promptSigil) - 1);
+}
+
+function formatMultilineInputGutter(lineIndex: number, lineNumberWidth: number, promptSigil = "›"): string {
+  const lineNumber = String(lineIndex + 1).padStart(lineNumberWidth, " ");
+  if (lineIndex === 0) {
+    return `${promptSigil}${lineNumber}`;
+  }
+
+  return `${" ".repeat(textWidth(promptSigil))}${lineNumber}`;
+}
+
+export function getMultilineInputDisplayRows(value: string, width: number, promptSigil = "›"): MultilineInputDisplayRow[] {
+  const lineNumberWidth = String(Math.max(1, value.split("\n").length)).length;
+  const valueWidth = getMultilineInputValueWidth(value, width, promptSigil);
   const rows: MultilineInputDisplayRow[] = [];
 
   value.split("\n").forEach((line, lineIndex) => {
     const wrapped = wrapTextLine(line, valueWidth);
     wrapped.forEach((text, wrapIndex) => {
       rows.push({
-        gutter: lineIndex === 0 && wrapIndex === 0 ? "›" : wrapIndex === 0 ? String(lineIndex + 1) : "",
+        gutter: wrapIndex === 0 ? formatMultilineInputGutter(lineIndex, lineNumberWidth, promptSigil) : "",
         hidden: false,
         text
       });
     });
   });
 
-  return rows.length > 0 ? rows : [{ gutter: "›", hidden: false, text: "" }];
+  return rows.length > 0
+    ? rows
+    : [{ gutter: formatMultilineInputGutter(0, lineNumberWidth, promptSigil), hidden: false, text: "" }];
 }
 
 export function getMultilineInputRows(
@@ -124,12 +140,16 @@ export function getMultilineInputRows(
   width: number,
   options: MultilineInputRowsOptions = {}
 ): number {
-  const wrapWidth = Math.max(1, width);
   const displayValue = maskValue(value, options.mask);
+  const cursorValue = insertCursor(displayValue, clamp(options.cursor ?? displayValue.length, 0, displayValue.length));
+  const wrapWidth = getMultilineInputValueWidth(
+    options.cursor === undefined ? displayValue : cursorValue,
+    width
+  );
   const rows =
     options.cursor === undefined
       ? getMaxCursorRows(displayValue, wrapWidth)
-      : wrapDisplayValue(insertCursor(displayValue, clamp(options.cursor, 0, displayValue.length)), wrapWidth).length;
+      : wrapDisplayValue(cursorValue, wrapWidth).length;
   return clamp(rows, 1, MAX_MULTILINE_INPUT_ROWS);
 }
 
@@ -172,8 +192,8 @@ export function MultilineInput({
   const [cursor, setCursor] = useState(value.length);
   const displayValue = useMemo(() => maskValue(value, mask), [mask, value]);
   const cursorValue = insertCursor(displayValue, clamp(cursor, 0, displayValue.length));
-  const gutterWidth = Math.max(getMultilineInputGutterWidth(cursorValue), textWidth(promptSigil));
-  const wrappedLines = getMultilineInputDisplayRows(cursorValue, width);
+  const gutterWidth = getMultilineInputGutterWidth(cursorValue, promptSigil);
+  const wrappedLines = getMultilineInputDisplayRows(cursorValue, width, promptSigil);
   const hiddenRows = Math.max(0, wrappedLines.length - MAX_MULTILINE_INPUT_ROWS);
   const visibleLines = wrappedLines.slice(-MAX_MULTILINE_INPUT_ROWS);
   if (hiddenRows > 0) {

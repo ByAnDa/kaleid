@@ -2,7 +2,7 @@ import React from "react";
 import { Box, Text } from "ink";
 import type { Msg } from "../types.js";
 import { Message, formatMessageRows, getMessageStyle } from "./Message.js";
-import { formatToolCallLine } from "./ToolCall.js";
+import { formatExpandedToolRows, formatToolCallLine } from "./ToolCall.js";
 import type { ResolvedTuiTheme } from "../theme/index.js";
 import { textWidth, wrapTextLine } from "./text-width.js";
 import { WELCOME_BANNER_ROWS, WelcomeBanner, type WelcomeBannerState } from "./WelcomeBanner.js";
@@ -51,9 +51,11 @@ export function estimateConversationEntryRows(
   }
 
   if (entry.msg.role === "tool" && entry.msg.tool) {
-    const contentWidth = Math.max(1, width - 2);
+    const lineWidth = Math.max(1, width);
+    const panelWidth = Math.max(1, lineWidth - 2);
+    const contentWidth = Math.max(1, panelWidth - 2);
     if (expandedToolIds.has(entry.msg.id)) {
-      return 1 + Math.min(8, estimateWrappedLineCount(entry.msg.tool.result || entry.msg.tool.resultSummary, contentWidth));
+      return 1 + formatExpandedToolRows(entry.msg.tool, contentWidth).length;
     }
     return estimateWrappedLineCount(formatToolCallLine(entry.msg.tool, contentWidth), contentWidth);
   }
