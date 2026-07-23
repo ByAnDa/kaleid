@@ -1,7 +1,16 @@
 # 流程
-最后更新：2026-07-23 by @kaleidLead
+最后更新：2026-07-24 by @kaleidLead
 
-## 通用流程摘要（KB 不可达时也能独立作业）
+## 规范正本 = github.com/ByAnDa/bylaws
+- 写 spec：`norms/spec-authoring.md`（🔴 A2 冲突分层 + G5 migration 默认 gate 已生效）。
+- 派单/盯单：`norms/multica-cli.md` + `norms/dispatch-brief.md`。
+- 端口/DB：`norms/ports-and-db.md`（起新服务先查）。
+- 全流程：`sop/carve-ship.md`；clone 不了时以本文件其余摘要作业。
+
+`ByAnDa/bylaws` 是规范/SOP/教训的唯一正本；本文件只保留 kaleid
+可离线作业的流程摘要。两者冲突时以 bylaws 为准。
+
+## 通用流程摘要（bylaws 不可达时也能独立作业）
 - **CARVE**：TALK → PRD → DESIGN → SPLIT → CHECK → QUEUE。
 - **SHIP**：PICK → SEND → WATCH → VERIFY → STAGE → ACCEPT。
 - ByAnDa 触点只有 TALK、STAGE(a)、ACCEPT 与不可逆高危 gate。
@@ -11,11 +20,7 @@
   3. 无 agent、无 Owner brief → 用 `roles.md` mention-link 唤醒 Owner，催过后收紧为 10m；
   4. 有 brief、无 agent、未落 dev、卡在人 → 不唤醒 squad，向人压缩为最小决策+默认选项，改日级跟进。
 - VERIFY 必须实测 `origin/dev`，不凭 brief。STAGE(a) 必须主动提请 ByAnDa，不自动发也不默默等。
-- 权威全文：`<KB>/技术经验共享/拆解spec-编排实施 无-Architect 执行 SOP/`。
-  - BYANDA-Home Linux：`<KB>` = `/mnt/c/Users/Administrator/Documents/ByAnDa/`
-  - Windows：`D:\Obsidian\ByAnDa\`
-  - Mac：`~/Documents/ByAnDa/`
-  - 都不可达时按本文件摘要作业，治理疑问 DM @Architect。
+- 权威全文：`ByAnDa/bylaws/sop/carve-ship.md`；仓库不可达时按本文件摘要作业，治理疑问 DM @Architect。
 
 ## 派单前唯一防线
 - 先确认 PRD/设计/spec 三角对齐，ByAnDa 已审 spec；没过 CHECK 不 SEND。
