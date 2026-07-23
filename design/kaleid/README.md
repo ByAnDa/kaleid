@@ -1,6 +1,12 @@
 # CODING AGENTS: READ THIS FIRST
 
 > **kaleid 项目接手提醒（2026-07-23）**：本文件只说明如何阅读 Claude Design 导出包；哪些文件属于现行设计、固定版本锚与禁引用项，以 repo `docs/handover/design-map.md` 为准。产品范围以 `docs/prd/core.md` 为准。
+>
+> **仓库保全状态**：外部 Claude Design 项目现已无授权、不可再取；repo
+> 最后抓取副本即正本，禁止再尝试 fetch。导出包旧路径
+> `design/kaleid/project/screenshots/` 的 9 张图已迁到
+> `design/reference/`；逐项旧→新映射见 design-map。完整 raw 设计会话已补到
+> `design/kaleid/chats/design-chat-kaleid-a60aadc1.json`。
 
 This is a **handoff bundle** from Claude Design (claude.ai/design).
 
