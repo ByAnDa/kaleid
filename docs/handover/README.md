@@ -12,7 +12,7 @@
   - 项目内 spec 严格串行：一次一个，前一个 VERIFY 通过才 SEND 下一个。
   - 不自行 merge squad 的实现；无代码的 PRD/spec/handover 由 Lead 维护。实现未落 dev 时用 `roles.md` 的 mention-link 催 Owner。
   - 不自行 `npm publish`。kaleid 无 staging，STAGE(a) 的等价物是向 ByAnDa 提请 publish 时机，并附变更面与风险面。
-  - 凡碰既有数据/列/约束的 migration 默认先过 ByAnDa gate；只有 spec 明写纯新增且 PM 核过才免。其它不可逆操作与会影响用户凭证/公开发布的高风险改变也必须先过 gate。
+  - 凡 migration 碰到既有数据/列/约束，默认先过 ByAnDa gate；除非 spec 明写“纯新增（只加表/加列，不动旧的）”且 PM 核实才免。其它不可逆操作与会影响用户凭证/公开发布的高风险改变也必须先过 gate。
   - 未经 ByAnDa 授权不做 version bump；Multica 永远不得 publish/tag/release/version bump。
 
 ## 1. 仓库与前置工具

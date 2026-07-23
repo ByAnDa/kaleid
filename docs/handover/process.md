@@ -24,8 +24,8 @@
 
 ## 派单前唯一防线
 - 先确认 PRD/设计/spec 三角对齐，ByAnDa 已审 spec；没过 CHECK 不 SEND。
-- A2 冲突分层：文字/业务/状态以 PRD 为准，视觉/交互以设计图为准；跨层冲突打回 PM，实施方不得自行择一。
-- G5 migration 白名单反转：凡碰既有数据/列/约束默认 ByAnDa-gated；只有 spec 明写纯新增且 PM 核过才免。
+- A2 冲突分层：文字/业务逻辑/状态流转以 PRD 为准，视觉/布局/交互形态以设计图为准；跨层真冲突打回 PM 三角对齐，实施方不得自行择一。
+- G5 migration 白名单反转：凡 migration 碰到既有数据/列/约束，一律默认 ByAnDa-gated；除非 spec 明写“纯新增（只加表/加列，不动旧的）”且 PM 核实才免。
 - spec 内每道门必须写齐：**谁闭合 / 可执行方式与判过标准 / 输出贴回 issue**。
 - DoD 说“证明 X 能工作”时必须明确证据是实环境还是允许替身；未写即不算定义完成。
 - squad 无能力闭合的门不得放进 self-merge 硬前置；上移 Lead VERIFY 或 ByAnDa ACCEPT。

@@ -4,7 +4,7 @@
 ## 🔴 本项目红线
 - **clean-room**：可借鉴 pi 的公开模式；不得复制第三方代码。Claude Code 泄露源码只曾作本地研究，公开 repo/spec/issue 禁留其仓库链接。
 - 公开 repo 的设计 bundle **不得包含 ByAnDa 私有 uploads/微信图**；只保留设计输出、token、chat 与允许公开的截图。
-- **G5 migration 白名单反转**：凡碰既有数据/列/约束默认 ByAnDa-gated；只有 spec 明写纯新增且 PM 核过才免。不得用“看起来非破坏性”自行放行。
+- **G5 migration 白名单反转**：凡 migration 碰到既有数据/列/约束，一律默认 ByAnDa-gated；除非 spec 明写“纯新增（只加表/加列，不动旧的）”且 PM 核实才免。不得用“看起来非破坏性”自行放行。
 - squad 只实施：必须 `feature/spec-*` → self-merge dev；禁止 publish/tag/release/version bump。
 - 版本只增 `0.0.xx`；未经 ByAnDa 明确同意禁止升 `0.x`。Lead 的发布链 bump 窄例外尚未获明确背书。
 - 所有 shell 执行必须走 `src/tools/bash-executor.ts` 单 chokepoint。
