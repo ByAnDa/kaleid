@@ -1,5 +1,7 @@
 # CODING AGENTS: READ THIS FIRST
 
+> **kaleid 项目接手提醒（2026-07-23）**：本文件只说明如何阅读 Claude Design 导出包；哪些文件属于现行设计、固定版本锚与禁引用项，以 repo `docs/handover/design-map.md` 为准。产品范围以 `docs/prd/core.md` 为准。
+
 This is a **handoff bundle** from Claude Design (claude.ai/design).
 
 A user mocked up designs in HTML/CSS/JS using an AI design tool, then exported this bundle so a coding agent can implement the designs for real.

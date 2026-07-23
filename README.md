@@ -1,16 +1,19 @@
 # kaleid
 
-A minimal terminal coding agent. kaleid signs in to OpenAI through your ChatGPT
-account (Codex OAuth), gives the model `read` / `write` / `edit` / `bash` tools,
-and runs an agent loop inside a small [Ink](https://github.com/vadimdemedes/ink)
-TUI — hand it a task in your terminal and watch it work.
+A minimal terminal coding agent. kaleid connects to OpenAI Codex through your
+ChatGPT account, or to DeepSeek and Kimi with your API key. It gives the model
+`read`, `write`, `edit`, and `bash` tools, then runs an agent loop in a compact
+[Ink](https://github.com/vadimdemedes/ink) TUI.
 
 ## Features
 
-- Sign in with your ChatGPT account (Codex OAuth) — no API key required
-- Built-in tools: `read`, `write`, `edit`, `bash`
-- Interactive REPL with slash commands, plus a one-shot mode for scripts
-- Single global install, default model `gpt-5.5`
+- OpenAI Codex OAuth, DeepSeek, and Kimi providers
+- Built-in read/write/edit/bash tools
+- Interactive full-screen TUI and one-shot mode
+- Model and reasoning selectors
+- Persistent JSONL sessions, resume, context usage, and compaction
+- Conversation names, projects, labels, and resume filters
+- Daylight/Spectrum themes and keyboard-driven tool/result panels
 
 ## Quick Start
 
@@ -18,43 +21,71 @@ Requires Node.js >= 22.
 
 ```bash
 npm i -g kaleid
-kaleid            # start the interactive REPL
+kaleid
 ```
 
-Inside the REPL, type `/` to see the command menu:
+Inside the TUI, type `/` to see the command menu:
 
 | Command | Description |
-|---------|-------------|
-| `/login`  | Sign in with your ChatGPT account (opens the browser) |
-| `/logout` | Sign out |
-| `/help`   | List commands |
-| `/exit`   | Quit |
+|---|---|
+| `/login` | Sign in to a provider |
+| `/logout` | Remove provider credentials |
+| `/model` | Select the current model |
+| `/reasoning` | Select Codex reasoning effort |
+| `/compact` | Compact conversation context |
+| `/resume` | Resume a saved session |
+| `/rename` | Rename the current conversation |
+| `/project` | Set the conversation project |
+| `/chatlabel` | Add or remove conversation labels |
+| `/theme` | Switch TUI theme |
+| `/help` | Show commands |
+| `/exit` | Quit |
 
-Anything that doesn't start with `/` is sent to the agent.
-
-One-shot (non-interactive):
+One-shot mode:
 
 ```bash
 kaleid "read package.json and summarize the scripts"
+kaleid -p "run the tests and explain any failure"
 ```
 
-Override the model for a run with `--model <id>`. Credentials are stored only on
-your machine at `~/.kaleid/auth.json`.
+Resume a session:
+
+```bash
+kaleid --continue
+kaleid --resume
+kaleid --resume <session-id>
+```
+
+Override the model with `--model <id>`.
+
+## Local Data
+
+kaleid stores credentials and sessions only on your machine:
+
+- `~/.kaleid/auth.json` — OpenAI Codex OAuth
+- `~/.kaleid/config.json` — DeepSeek/Kimi API keys
+- `~/.kaleid/sessions/*.jsonl` — saved conversations
+
+Do not commit or share these files.
 
 ## Disclaimer
 
-kaleid uses ChatGPT OAuth for OpenAI Codex access and is subject to OpenAI's
-policies and your account terms. It does not bundle API keys, ChatGPT
-credentials, or subscription access.
+kaleid's provider integrations are subject to each provider's policies and your
+account terms. The package does not bundle API keys, ChatGPT credentials, or
+subscription access.
 
 ## Development
 
 ```bash
-npm install
+npm ci
 npm run typecheck
 npm test
 npm run build
+npm pack --dry-run
 ```
+
+Project handover and canonical product documentation live in
+`docs/handover/` and `docs/prd/`.
 
 ## License
 
