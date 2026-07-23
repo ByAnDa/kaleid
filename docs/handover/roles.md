@@ -31,4 +31,4 @@
 | squad 越权 publish/bump/tag 或未 self-merge | 不代做；先 mention-link Owner，仍不动则报 @ByAnDa |
 | 不可逆/公开发布/凭证风险 | 直接走 @ByAnDa gate |
 | SOP/治理疑问 | DM @Architect |
-| 产品/设计优先级 | @ByAnDa；无独立 PM 可替她拍 |
+| 产品/设计优先级 | @ByAnDa；本项目无独立 PM，产品裁决权始终在 ByAnDa |

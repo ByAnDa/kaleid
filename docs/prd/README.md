@@ -12,10 +12,10 @@ PRD 维护权：kaleid 无独立 PM，由 @kaleidLead 暂代并直接维护本�
 ## 现行
 | PRD | 功能 | 对应设计稿版本 | 状态 |
 |---|---|---|---|
-| `core.md`（v0.5，2026-07-23） | 终端编码 Agent：provider、工具、loop、会话、全屏 TUI、npm 分发与演进 | `design/kaleid/` @ **`84d513c`**；纯逻辑模块 N/A | ✅ 现行；0.0.16 已发布，Phase B 未批准 |
+| `core.md`（v0.5a，2026-07-23） | 终端编码 Agent：provider、工具、loop、会话、全屏 TUI、npm 分发与演进 | `design/kaleid/` @ **`84d513c`**；纯逻辑模块 N/A | ✅ 现行；0.0.16 已发布，Phase B 未批准 |
 
 ## 已废弃（禁作依据）
 | PRD | 被谁取代 | 废弃日期 |
 |---|---|---|
-| `docs/kaleid-prd-v0.4.md` 完整旧本 | `docs/prd/core.md` v0.5；旧路径只保留指针 | 2026-07-23 |
-| vault `ByAnDa/kaleid/kaleid PRD v0.4.md` | `docs/prd/core.md` v0.5 | 2026-07-23 |
+| `docs/kaleid-prd-v0.4.md` 完整旧本 | `docs/prd/core.md` v0.5a；旧路径只保留指针 | 2026-07-23 |
+| vault `ByAnDa/kaleid/kaleid PRD v0.4.md` | `docs/prd/core.md` v0.5a | 2026-07-23 |

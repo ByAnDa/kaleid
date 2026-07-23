@@ -5,7 +5,7 @@
 kaleid 是一个公开发布到 npm 的极简终端编码 Agent：多 provider、read/write/edit/bash 工具、agent loop、持久化会话与全屏 Ink TUI。
 
 ## 栈与结构
-- TypeScript + Node.js（ESM）；Ink/React TUI；zod 校验；esbuild 单文件 bundle。
+- TypeScript + Node.js（ESM；package 要求 >=22；Node 24 是维护机 BYANDA-Home 特定验证基线）；Ink/React TUI；zod 校验；esbuild 单文件 bundle。
 - `src/provider/`：Codex OAuth Responses API + DeepSeek/Kimi OpenAI-compatible 路由。
 - `src/auth/`：OAuth、token 与 API-key 本地持久化。
 - `src/tools/`：read/write/edit/bash；bash 统一经过 `bash-executor.ts`。

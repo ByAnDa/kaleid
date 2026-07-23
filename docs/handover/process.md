@@ -26,7 +26,7 @@
 - 破坏性验证要减少/收紧被测能力，让断言确实变红；输出必须贴回 issue。
 
 ## 本项目差异
-- kaleid 无独立 PM，Lead 暂代 PRD/SPLIT；标准顺序固定为：ByAnDa 提需求 → Lead 改 `docs/prd/` + spec → 发 ByAnDa 审核 → 批准后才 SEND。
+- kaleid 无独立 PM，Lead 暂代 PRD/SPLIT；标准顺序固定为：ByAnDa TALK → Lead 更新 `docs/prd/` → TUI 项走 DESIGN（纯逻辑项显式 N/A）→ Lead SPLIT spec → ByAnDa CHECK → Lead QUEUE/PICK → 才能 SEND。
 - squad 从 `dev` 切 `feature/spec-<NNN>-<slug>`，双 QA 后 self-merge 回 dev；Lead 不代合。
 - 本项目不开实施 PR；当前维护机无 `gh`。实施是否落 dev 用 `git fetch origin dev && git log origin/dev` 验真。
 - **无 staging**：STAGE(a) = 提请 npm publish 时机，附变更面+风险面。ByAnDa 点头后也仍由她自己发布。

@@ -24,10 +24,10 @@
 | 工具 | 验证命令 | 备注 |
 |---|---|---|
 | git | `git -C ~/repos/kaleid status --short --branch` | dev 真值用 `origin/dev` |
-| Node/npm | `node --version && npm --version` | package 要求 Node >=22；当前维护机 Node 24 |
+| Node/npm | `node --version && npm --version` | package 要求 Node >=22；Node 24 仅是维护机 **BYANDA-Home 特定**现状，换机重查 |
 | multica CLI | `multica issue list --project a89d8382-7a05-4811-9c46-f3078c845023` | 派单/盯单；项目 UUID 固定 |
 | raft CLI | `raft profile show` | Slock 通信 |
-| gh CLI | `command -v gh` | 当前维护机未安装；用 git 远端命令等价验真 |
+| gh CLI | `command -v gh` | 未安装仅是维护机 **BYANDA-Home 特定**现状；换机重查。无 gh 时用 git 远端命令等价验真 |
 
 ## 2. 读序
 `status.md` → `project.md` → `process.md` → `roles.md` → `redlines.md` → `decisions.md` → `design-map.md` → `../prd/README.md`
@@ -73,6 +73,6 @@ npm view kaleid version
 | `README.md` | 保留为公众安装/使用说明，已按 0.0.16 能力校正 |
 | `ONBOARDING.md` | 稳定事实层；顶部指向本文件夹，动态状态改为指针 |
 | `design/kaleid/README.md` | 保留为设计导出包阅读说明；顶部补 handover/design-map 正本指针 |
-| `docs/kaleid-prd-v0.4.md` | 只保留废弃指针；正本迁至 `docs/prd/core.md` v0.5 |
+| `docs/kaleid-prd-v0.4.md` | 只保留废弃指针；正本迁至 `docs/prd/core.md` v0.5a |
 | `specs/` | `specs/README.md` 为索引；spec 正文仍是实施契约 |
 | vault `ByAnDa/kaleid/*.md` | PRD/spec 副本已标历史/废弃；此后不再维护，repo 为唯一正本 |

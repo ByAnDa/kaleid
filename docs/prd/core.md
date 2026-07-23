@@ -1,7 +1,7 @@
 ---
 项目: kaleid
 文档: 核心 PRD
-版本: v0.5
+版本: v0.5a
 日期: 2026-07-23
 作者: "@kaleidLead（暂代 PM）"
 Reviewer: "@ByAnDa"
@@ -9,9 +9,10 @@ Reviewer: "@ByAnDa"
 对应设计稿版本: "design/kaleid @ 84d513c（v2 TUI）；纯逻辑模块 N/A"
 ---
 
-# kaleid PRD v0.5 — 终端编码 Agent
+# kaleid PRD v0.5a — 终端编码 Agent
 
 ## 变更日志
+- **v0.5a（2026-07-23）**：Architect 全量冷读后的事实修正：Node 24 明确为维护机特定基线；版本字面量由 stale“三处”纠正为现行两处。
 - **v0.5（2026-07-23）**：迁入 `docs/prd/` 唯一正本；把 spec-015~025 的已交付能力与 0.0.16 发布事实并入；纠正旧稿“待审核/进行中”状态；补设计固定锚与证据边界。
 - v0.4（2026-05-22~26）：把 spec-008~025 逐次写回，但文件头版本未随内容更新（本次修正）。
 - v0.3（2026-05-22）：V1 定稿，provider 锁 Codex OAuth + gpt-5.5。
@@ -64,7 +65,7 @@ kaleid 是一个**极简终端编码 Agent（harness）**：接入 OpenAI Codex 
 - resume 在足够宽的终端显示只读 preview pane；窄屏降级为列表。
 
 ### 3.5 打包与分发
-- TypeScript + Node（package engine >=22，维护基线 Node 24）。
+- TypeScript + Node（package engine >=22；Node 24 是维护机 BYANDA-Home 特定验证基线，不是额外产品门槛）。
 - esbuild 打成单文件 `dist/index.js`，npm bin 为 `kaleid`。
 - 包为 `UNLICENSED`，不带 LICENSE 文件。
 - `npm pack` 边界固定 3 文件：README、dist/index.js、package.json。
@@ -146,7 +147,7 @@ npm pack --dry-run
 - Anthropic 禁止第三方用 Claude 订阅 OAuth；未来接 Claude 只能官方 API key。
 - 真实 wire 未形成可重复自动门；当前“可用”更多依赖 ByAnDa 日常实用探针。
 - resume <=62 列仍可能塌缩；是否修由 ByAnDa 排期。
-- version 字面量仍有三处硬编码；是否做 spec-026 由 ByAnDa 决定。
+- version 字面量当前有两处硬编码（`package.json` + `WelcomeBanner.VERSION_LABEL`）；是否做 spec-026 由 ByAnDa 决定。
 - Phase B 的范围与顺序尚未拍板。
 
 ## 维护

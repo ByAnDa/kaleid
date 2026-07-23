@@ -35,7 +35,7 @@ kaleid 是 clean-room 自研的终端编码 Agent CLI（TypeScript + Node + Ink�
 ## 2. 技术栈
 | 层 | 技术 |
 |---|---|
-| 语言/runtime | TypeScript + Node.js（ESM；package engine >=22，维护基线 Node 24） |
+| 语言/runtime | TypeScript + Node.js（ESM；package engine >=22；Node 24 是维护机 BYANDA-Home 特定基线） |
 | TUI | Ink + React + 自研终端 diff renderer |
 | LLM | 原生 fetch/SSE；Codex OAuth Responses / DeepSeek/Kimi compatible |
 | schema | zod |

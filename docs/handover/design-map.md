@@ -6,14 +6,14 @@
 |---|---|---|
 | v2 全屏 TUI 布局/交互 | `design/kaleid/project/tui-screens.jsx` + `design/kaleid/chats/chat1.md` + `screenshots/{01-v2-multi,02-v2-multi,v2-chats,v2-overview,v2-streaming}.png` | **`84d513c`**（2026-05-26） |
 | Daylight / Spectrum token、state/mode palette | `design/kaleid/project/kaleid-tokens.js` | **`84d513c`** |
-| v1 palette/基础视觉参考 | `design/kaleid/project/screenshots/{kaleid-final,tokens-dark-mid,tokens-light}.png` | **`5ab8ad1`**；只作 palette/历史基础参考，布局不得覆盖 v2 |
+| v1 palette/基础视觉参考 | `design/kaleid/project/screenshots/{kaleid-final,tokens-dark-mid,tokens-light}.png` | **`5ab8ad1`**；只作 palette/历史基础参考。**例外：已批准的 `specs/spec-025-v2-phase-a.md` §3 明确引用 `kaleid-final.png` 的 resume 筛选栏排布，该局部可作现行依据；其余布局不得覆盖 v2** |
 
 > DESIGN 步确认新版后，立刻把对应行更新为新设计文件的最后 commit。取值：`git log origin/dev -1 --format=%h -- "<路径>"`。
 
 ## 🔴 Confusable 排除表
 | 禁引用 | 为什么像正本 | 处置 |
 |---|---|---|
-| 5ab8ad1 的 `canvas-overview.png` / `kaleid-final.png` 作为完整现行布局 | 与现行 bundle 同目录、配色仍像当前 | 仅 palette/历史对照；现行 v2 布局看 84d513c |
+| 5ab8ad1 的 `canvas-overview.png` / `kaleid-final.png` 作为完整现行布局 | 与现行 bundle 同目录、配色仍像当前 | 仅 palette/历史对照；现行 v2 布局看 84d513c。**`kaleid-final.png` 的唯一局部例外 = spec-025 §3 已批准的 resume 筛选栏排布** |
 | 外部 Claude Design fetch URL / `/tmp/kaleid-design*` 解包目录 | 是设计上游且文件名相同 | 上游/临时缓存，不是正本；repo 固定 hash 才是 |
 | spec/Multica issue 中嵌入的用户截图 | 看起来最贴近某次 bug | 只作缺陷证据，不作完整视觉基准 |
 | `uploads/` 私图 | 曾是上游设计输入 | 明确排除，不得进公开 repo |
