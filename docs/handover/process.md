@@ -13,7 +13,7 @@
 ## 通用流程摘要（bylaws 不可达时也能独立作业）
 - **CARVE**：TALK → PRD → DESIGN → SPLIT → CHECK → QUEUE。
 - **SHIP**：PICK → SEND → WATCH → VERIFY → STAGE → ACCEPT。
-- ByAnDa 触点只有 TALK、STAGE(a)、ACCEPT 与不可逆高危 gate。
+- ByAnDa 触点只有 TALK、STAGE(a)、ACCEPT 与 G5 migration / 其它不可逆高危 gate。
 - SEND 后立刻挂 `--repeat every:20m` reminder；WATCH 四态回查：
   1. 实施已落 dev → VERIFY；
   2. agent 仍在跑 → 继续 recurring 监控；
@@ -24,6 +24,8 @@
 
 ## 派单前唯一防线
 - 先确认 PRD/设计/spec 三角对齐，ByAnDa 已审 spec；没过 CHECK 不 SEND。
+- A2 冲突分层：文字/业务/状态以 PRD 为准，视觉/交互以设计图为准；跨层冲突打回 PM，实施方不得自行择一。
+- G5 migration 白名单反转：凡碰既有数据/列/约束默认 ByAnDa-gated；只有 spec 明写纯新增且 PM 核过才免。
 - spec 内每道门必须写齐：**谁闭合 / 可执行方式与判过标准 / 输出贴回 issue**。
 - DoD 说“证明 X 能工作”时必须明确证据是实环境还是允许替身；未写即不算定义完成。
 - squad 无能力闭合的门不得放进 self-merge 硬前置；上移 Lead VERIFY 或 ByAnDa ACCEPT。

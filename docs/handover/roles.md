@@ -1,10 +1,10 @@
 # 人与通信
-最后更新：2026-07-23 by @kaleidLead
+最后更新：2026-07-24 by @kaleidLead
 
 ## 角色表
 | 角色 | 谁 | 干什么 |
 |---|---|---|
-| Owner / 决策 / 发布 | @ByAnDa | TALK、STAGE(a)、ACCEPT、不可逆 gate、npm publish |
+| Owner / 决策 / 发布 | @ByAnDa | TALK、STAGE(a)、ACCEPT、G5 migration / 不可逆 gate、npm publish |
 | Lead（暂代 PM） | @kaleidLead | PRD/spec、QUEUE/SEND/WATCH/VERIFY、发布提请、handover 保鲜 |
 | PM | 无独立角色 | 当前由 @kaleidLead 暂代；产品拍板仍归 @ByAnDa |
 | Multica squad | `kaleid` | 唯一代码实施主体：Owner+Coder+双 QA |
@@ -29,6 +29,7 @@
 | 无 agent 且无 Owner brief | issue 评论用 mention-link 唤醒，继续 recurring WATCH |
 | 有 brief、未落 dev、卡在人 | 不唤醒 squad；向对应人收敛最小决策，日级跟进 |
 | squad 越权 publish/bump/tag 或未 self-merge | 不代做；先 mention-link Owner，仍不动则报 @ByAnDa |
-| 不可逆/公开发布/凭证风险 | 直接走 @ByAnDa gate |
+| 凡碰既有数据/列/约束的 migration | 默认走 @ByAnDa gate；只有 spec 明写纯新增且 PM 核过才免 |
+| 其它不可逆/公开发布/凭证风险 | 直接走 @ByAnDa gate |
 | SOP/治理疑问 | DM @Architect |
 | 产品/设计优先级 | @ByAnDa；本项目无独立 PM，产品裁决权始终在 ByAnDa |

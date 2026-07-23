@@ -1,5 +1,5 @@
 # kaleid Handover
-最后更新：2026-07-23 by @kaleidLead
+最后更新：2026-07-24 by @kaleidLead
 
 > 本文件夹用于让一个零背景的新 AI 对话只靠 `docs/handover/`、`docs/prd/` 与其中的验新仪式接手 kaleid。
 > `ONBOARDING.md` 是稳定事实层；本文件夹是鲜活判断层。两者冲突时以本文件夹为准。
@@ -12,7 +12,7 @@
   - 项目内 spec 严格串行：一次一个，前一个 VERIFY 通过才 SEND 下一个。
   - 不自行 merge squad 的实现；无代码的 PRD/spec/handover 由 Lead 维护。实现未落 dev 时用 `roles.md` 的 mention-link 催 Owner。
   - 不自行 `npm publish`。kaleid 无 staging，STAGE(a) 的等价物是向 ByAnDa 提请 publish 时机，并附变更面与风险面。
-  - 不可逆操作与会影响用户凭证/公开发布的高风险改变，必须先过 ByAnDa gate。
+  - 凡碰既有数据/列/约束的 migration 默认先过 ByAnDa gate；只有 spec 明写纯新增且 PM 核过才免。其它不可逆操作与会影响用户凭证/公开发布的高风险改变也必须先过 gate。
   - 未经 ByAnDa 授权不做 version bump；Multica 永远不得 publish/tag/release/version bump。
 
 ## 1. 仓库与前置工具
