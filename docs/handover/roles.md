@@ -29,7 +29,7 @@
 | 无 agent 且无 Owner brief | issue 评论用 mention-link 唤醒，继续 recurring WATCH |
 | 有 brief、未落 dev、卡在人 | 不唤醒 squad；向对应人收敛最小决策，日级跟进 |
 | squad 越权 publish/bump/tag 或未 self-merge | 不代做；先 mention-link Owner，仍不动则报 @ByAnDa |
-| 凡 migration 碰到既有数据/列/约束 | 默认走 @ByAnDa gate；除非 spec 明写“纯新增（只加表/加列，不动旧的）”且 PM 核实才免 |
+| migration | **跑起来既有行会被读或写 ⇒ gate；判不准也 gate**（不由实施者自解释）；完整免除条件与例子见 `ByAnDa/bylaws/norms/spec-authoring.md` §6 |
 | 其它不可逆/公开发布/凭证风险 | 直接走 @ByAnDa gate |
 | SOP/治理疑问 | DM @Architect |
 | 产品/设计优先级 | @ByAnDa；本项目无独立 PM，产品裁决权始终在 ByAnDa |
