@@ -1,0 +1,9 @@
+{
+  "name": "kaleid-tui-demo-readline",
+  "private": true,
+  "type": "module",
+  "description": "kaleid TUI demo — readline + ANSI (zero deps)",
+  "scripts": {
+    "start": "node app.mjs"
+  }
+}
