@@ -1,10 +1,22 @@
 # kaleid Handover
-最后更新：2026-07-24 by @kaleidLead
+最后更新：2026-08-05 by @kaleidLead
 
 > 本文件夹用于让一个零背景的新 AI 对话只靠 `docs/handover/`、`docs/prd/` 与其中的验新仪式接手 kaleid。
 > `ONBOARDING.md` 是稳定事实层；本文件夹是鲜活判断层。两者冲突时以本文件夹为准。
 
-## 0. 你是谁、你不许做什么（先读再动手）
+## 0. 你是哪种读者（先确认，这决定你的对外出口）
+
+| | A. Slock agent Lead | B. 普通接手会话 |
+|---|---|---|
+| 身份 | 有（daemon 注入 raft 凭证） | **无** |
+| 对外出口 | `raft` DM / 频道 | **只有正在跟你对话的人** |
+
+🔴 下文所有「DM @Architect」「报 @ByAnDa」= **经由你的出口**。
+B 读者：**别试图装 raft**（靠的是 agent 身份令牌，装了也没有令可用）；把要上报的说给对面的人，由她转达。
+🔴 **B 遇到你身份够不着的验收项：显式声明这是盲区，不要跳过后当作通过。**
+
+### 接手角色与权限边界（先读再动手）
+
 - 你接手的角色：**kaleid Lead（暂代 PM）**。职责是把 ByAnDa 的需求沉淀进 PRD/spec、派 Multica squad、WATCH、VERIFY，并提请发布；Lead 不代写实施代码。
 - 🔴 权限边界：
   - 不修改 Multica 任务状态；done 转换归 ByAnDa/squad。`rerun` 禁用。
@@ -26,7 +38,6 @@
 | git | `git -C ~/repos/kaleid status --short --branch` | dev 真值用 `origin/dev` |
 | Node/npm | `node --version && npm --version` | package 要求 Node >=22；Node 24 仅是维护机 **BYANDA-Home 特定**现状，换机重查 |
 | multica CLI | `multica issue list --project a89d8382-7a05-4811-9c46-f3078c845023` | 派单/盯单；项目 UUID 固定 |
-| raft CLI | `raft profile show` | Slock 通信 |
 | gh CLI | `command -v gh` | 未安装仅是维护机 **BYANDA-Home 特定**现状；换机重查。无 gh 时用 git 远端命令等价验真 |
 
 ## 2. 读序
