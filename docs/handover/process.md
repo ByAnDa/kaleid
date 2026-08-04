@@ -6,6 +6,7 @@
 - 派单/盯单：`norms/multica-cli.md` + `norms/dispatch-brief.md`。
 - 端口/DB：`norms/ports-and-db.md`（起新服务先查）。
 - 全流程：`sop/carve-ship.md`；clone 不了时以本文件其余摘要作业。
+- 本机固定位置：`~/repos/bylaws`（每台机器一份，该机所有 agent 共用；不存在就 clone 到这里）。只读 + `git pull`；要往 bylaws 推送的，用自己 workspace 里的独立 clone。
 
 `ByAnDa/bylaws` 是规范/SOP/教训的唯一正本；本文件只保留 kaleid
 可离线作业的流程摘要。两者冲突时以 bylaws 为准。
