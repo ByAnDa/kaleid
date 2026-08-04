@@ -18,6 +18,7 @@
 - 🔴 纯文本 `@kaleid Owner` 不可靠；改状态/重新 assign 不会唤醒已派任务；`rerun` 禁用。
 
 ## Slock 频道
+🔴 本节及下方「找谁」表默认读者 A（有 raft 身份）。读者 B 没有对外出口——所有「DM @X」= 说给正在跟你对话的人，由她转达。先读 `README.md` §0。
 - **#kaleid-spec**：项目需求、审核、派单与验收主频道。
 - #Architect：广播/任务回执；治理疑问 DM @Architect，不在频道展开。
 - #all：永久静默。
